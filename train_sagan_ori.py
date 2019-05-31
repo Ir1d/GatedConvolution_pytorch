@@ -1,5 +1,4 @@
 import torch
-from torch import autograd
 import torch.nn as nn
 import torch.nn.functional as F
 #from models.gatedconv import InpaintGCNet, InpaintDirciminator
@@ -72,7 +71,7 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, dataloader, epoc
         #masks = (masks > 0).type(torch.FloatTensor)
 
         imgs, masks = imgs.to(device), masks.to(device)    
-        masks = 1 - masks / 255.0
+        # masks = 1 - masks / 255.0
         # 1 for masks    
         imgs = (imgs / 127.5 - 1)
         # mask is 1 on masked region
@@ -163,15 +162,15 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, dataloader, epoch, 
     end = time.time()
     for i, (imgs, masks) in enumerate(dataloader):
         data_time.update(time.time() - end)
-        masks = masks['mine']
-        # masks = masks['random_free_form']
+        # masks = masks['mine']
+        masks = masks['random_free_form']
 
         # Optimize Discriminator
         optD.zero_grad(), netD.zero_grad(), netG.zero_grad(), optG.zero_grad()
 
         imgs, masks = imgs.to(device), masks.to(device)
         # print(imgs.shape)
-        masks = 1 - masks / 255.0 
+        # masks = 1 - masks / 255.0 
         # masks = masks / 255.0 
         # 1 for masks, areas with holes
         # print(masks.min(), masks.max())
@@ -330,8 +329,7 @@ def main():
         #validate(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, val_loader, i, device=cuda0)
 
         #train data
-        with autograd.detect_anomaly():
-            train(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, train_loader, i, device=cuda0, val_datas=val_datas)
+        train(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, train_loader, i, device=cuda0, val_datas=val_datas)
 
         # validate
         validate(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, val_datas, i, device=cuda0)

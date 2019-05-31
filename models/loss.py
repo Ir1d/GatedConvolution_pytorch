@@ -166,6 +166,7 @@ class ReconLoss(torch.nn.Module):
 
     def forward(self, imgs, coarse_imgs, recon_imgs, masks):
         masks_viewed = masks.view(masks.size(0), -1)
+        # print('masks_mean: ', masks.size(0), masks_viewed.mean(1))
         return self.rhole_alpha*torch.mean(torch.abs(imgs - recon_imgs) * masks / masks_viewed.mean(1).view(-1,1,1,1))  + \
                 self.runhole_alpha*torch.mean(torch.abs(imgs - recon_imgs) * (1. - masks) / (1. - masks_viewed.mean(1).view(-1,1,1,1)))  + \
                 self.chole_alpha*torch.mean(torch.abs(imgs - coarse_imgs) * masks / masks_viewed.mean(1).view(-1,1,1,1))   + \

@@ -1,0 +1,436 @@
+diff --git a/config/inpaint_places2_sagan.yml b/config/inpaint_places2_sagan.yml
+index 07d9ba2..a50ed62 100644
+--- a/config/inpaint_places2_sagan.yml
++++ b/config/inpaint_places2_sagan.yml
+@@ -1,19 +1,21 @@
+ #Dataset and Loading Setting
+-DATASET: 'places2'  # 'tmnist', 'dtd', 'places2', 'celeba', 'imagenet', 'cityscapes'
+-MASKDATASET: 'irrmask'
+-MASK_TYPES: ['random_free_form']
++DATASET: 'inpainting'  # 'tmnist', 'dtd', 'places2', 'celeba', 'imagenet', 'cityscapes'
++MASKDATASET: 'mymask'
++MASK_TYPES: ['mine']
++# MASK_TYPES: ['random_free_form']
+ RANDOM_CROP: False
+ MASKFROMFILE: False
+-LOG_DIR: full_model_places2_sa_bn_256
++LOG_DIR: full_model_syn_sa_bn_352
+ MODEL_RESTORE: '' #'201809200859_full_model_places2_256/epoch_1_ckpt.pth.tar'  # '20180115220926508503_jyugpu0_places2_NORMAL_wgan_gp_full_model'
+ 
+ #overall setting
+ GAN: 'sn_pgan'  # 'dcgan', 'lsgan', 'wgan_gp', 'one_wgan_gp'
+ PRETRAIN_COARSE_NETWORK: False
+-IMG_SHAPES: [256, 256]
++IMG_SHAPES: [352, 352]
++# IMG_SHAPES: [256, 256]
+ RANDOM_BBOX_SHAPE: [32, 32]
+ RANDOM_BBOX_MARGIN: [64, 64]
+-BATCH_SIZE: 4
++BATCH_SIZE: 2 # 4 for 352, 8 for 256
+ RANDOM_SEED: False
+ PADDING: 'SAME'
+ BATCH_NORM: True
+@@ -38,6 +40,7 @@ GRADIENT_CLIP_VALUE: 0.1
+ SUMMARY_FREQ: 50
+ VAL_SUMMARY_FREQ: 5000
+ LEARNING_RATE: 0.0001
++# LEARNING_RATE: 0.0001
+ WEIGHT_DECAY: 0.0
+ 
+ #validate
+@@ -67,6 +70,10 @@ SPATIAL_DISCOUNTING_GAMMA: 0.9
+ 
+ # data
+ DATA_FLIST:
++  inpainting: [
++    '/home/xudejia/inpainting/data/train_img_list.txt',
++    '/home/xudejia/inpainting/data/val_img_list.txt'
++  ]
+   # https://github.com/JiahuiYu/progressive_growing_of_gans_tf
+   celebahq: [
+     'data/celeba_hq/train_shuffled.flist',
+@@ -87,6 +94,22 @@ DATA_FLIST:
+     'data/imagenet/train_shuffled.flist',
+     'data/imagenet/validation_static_view.flist',
+   ]
++  mymask:
++    mine:
++      [
++        '/home/xudejia/inpainting/data/train_mask_list.txt',
++        '/home/xudejia/inpainting/data/train_mask_list.txt'
++      ]
++    random_free_form:
++      [
++        '/home/xudejia/inpainting/data/train_mask_list.txt',
++        '/home/xudejia/inpainting/data/train_mask_list.txt'
++      ]
++    val:
++      [
++        '/home/xudejia/inpainting/data/val_mask_list.txt',
++        '/home/xudejia/inpainting/data/val_mask_list.txt'
++      ]
+   irrmask:
+       random_free_form:
+           [
+diff --git a/config/test_places2_sagan.yml b/config/test_places2_sagan.yml
+index 2ea5774..419f525 100644
+--- a/config/test_places2_sagan.yml
++++ b/config/test_places2_sagan.yml
+@@ -1,7 +1,8 @@
+ #Dataset and Loading Setting
+-DATASET: 'places2'  # 'tmnist', 'dtd', 'places2', 'celeba', 'imagenet', 'cityscapes'
+-MASKDATASET: 'irrmask'
+-MASK_TYPES: ['random_free_form']
++DATASET: 'inpainting'  # 'tmnist', 'dtd', 'places2', 'celeba', 'imagenet', 'cityscapes'
++MASKDATASET: 'mymask'
++MASK_TYPES: ['mine']
++# MASK_TYPES: ['random_free_form']
+ RANDOM_CROP: False
+ MASKFROMFILE: False
+ LOG_DIR: small_model_places2_sa_bn_l2h_unet_perc_style_nocon_256
+@@ -37,7 +38,7 @@ RANDOM_FF_SETTING:
+ 
+ # training
+ NUM_GPUS: 1
+-GPU_IDS: [0,1]  # -1 indicate select any available one, otherwise select gpu ID, e.g. [0,1,3]
++GPU_IDS: [0]  # -1 indicate select any available one, otherwise select gpu ID, e.g. [0,1,3]
+ EPOCH: 50
+ SUMMARY_FREQ: 100
+ VAL_SUMMARY_FREQ: 10000
+@@ -73,6 +74,10 @@ SPATIAL_DISCOUNTING_GAMMA: 0.9
+ 
+ # data
+ DATA_FLIST:
++  inpainting: [
++    '/home/xudejia/inpainting/data/train_img_list.txt',
++    '/home/xudejia/inpainting/data/val_img_list.txt'
++  ]
+   # https://github.com/JiahuiYu/progressive_growing_of_gans_tf
+   celebahq: [
+     'data/celeba_hq/train_shuffled.flist',
+@@ -93,6 +98,17 @@ DATA_FLIST:
+     'data/imagenet/train_shuffled.flist',
+     'data/imagenet/validation_static_view.flist',
+   ]
++  mymask:
++    mine:
++      [
++        '/home/xudejia/inpainting/data/train_mask_list.txt',
++        '/home/xudejia/inpainting/data/train_mask_list.txt'
++      ]
++    val:
++      [
++        '/home/xudejia/inpainting/data/val_mask_list.txt',
++        '/home/xudejia/inpainting/data/val_mask_list.txt'
++      ]
+   irrmask:
+       random_free_form:
+           [
+diff --git a/data/inpaint_dataset.py b/data/inpaint_dataset.py
+index 9478419..3f55a91 100644
+--- a/data/inpaint_dataset.py
++++ b/data/inpaint_dataset.py
+@@ -8,7 +8,7 @@ from .base_dataset import BaseDataset, NoriBaseDataset
+ from torch.utils.data import Dataset, DataLoader
+ import pickle as pkl
+ 
+-ALLMASKTYPES = ['bbox', 'seg', 'random_bbox', 'random_free_form', 'val']
++ALLMASKTYPES = ['bbox', 'seg', 'random_bbox', 'random_free_form', 'val', 'mine']
+ 
+ class InpaintDataset(BaseDataset):
+     """
+@@ -30,6 +30,7 @@ class InpaintDataset(BaseDataset):
+                 random_bbox_shape=(32, 32), random_bbox_margin=(64, 64),
+                 random_ff_setting={'img_shape':[256,256],'mv':5, 'ma':4.0, 'ml':40, 'mbw':10}, random_bbox_number=5):
+ 
++        print(mask_flist_paths_dict)
+         with open(img_flist_path, 'r') as f:
+             self.img_paths = f.read().splitlines()
+ 
+@@ -71,19 +72,27 @@ class InpaintDataset(BaseDataset):
+ 
+         mask_paths = {}
+         for mask_type in self.mask_paths:
++            # print(mask_type, index)
++            index = index % len(self.mask_paths)
+             mask_paths[mask_type] = self.mask_paths[mask_type][index]
+ 
+-        img = self.transforms_fun(self.read_img(img_path))
++        img = self.transforms_fun(self.read_img(img_path)) * 255
+ 
+         masks = {mask_type:255*self.transforms_fun(self.read_mask(mask_paths[mask_type], mask_type))[:1, :,:] for mask_type in mask_paths}
+ 
+-        return img*255, masks
++        # print(img.max(), img.min(), masks['val'].max(), masks['val'].min())
++        # masks['val'][ masks['val'] < 128 ] = 0
++        # masks['val'][ masks['val'] > 128 ] = 255
++        return img, masks
+ 
+     def read_img(self, path):
+         """
+         Read Image
+         """
+-        img = Image.open(path).convert("RGB")
++        img = Image.open(path)#.convert("RGB")
++        img = np.stack((img,)*3, axis=-1)
++        # print(img.shape)
++        img = Image.fromarray(img.astype(np.uint8))
+         return img
+ 
+ 
+@@ -91,6 +100,15 @@ class InpaintDataset(BaseDataset):
+         """
+         Read Masks now only support bbox
+         """
++        mask = Image.open(path)
++        new_mask = np.array(mask)
++        new_mask[new_mask < 128] = 0
++        new_mask[new_mask >= 128] = 255
++        mask = Image.fromarray(new_mask.astype(np.uint8))
++        return mask
++        # return Image.fromarray(np.tile(mask * 255,(1,1,3)).astype(np.uint8))
++
++
+         if mask_type == 'random_bbox':
+             bboxs = []
+             for i in range(self.random_bbox_number):
+@@ -115,7 +133,16 @@ class InpaintDataset(BaseDataset):
+         """
+         Read masks from val mask data
+         """
+-        mask = pkl.load(open(path, 'rb'))
++        mask = Image.open(path)
++        new_mask = np.array(mask)
++        new_mask[new_mask < 128] = 0
++        new_mask[new_mask >= 128] = 255
++        mask = Image.fromarray(new_mask.astype(np.uint8))
++        return mask
++        mask = Image.open(path)#  * 255
++        return mask
++        # mask = Image.fromarray(np.tile(mask,(1,1,3)).astype(np.uint8))
++        # mask = pkl.load(open(path, 'rb'))
+         return mask
+ 
+ 
+@@ -364,12 +391,15 @@ class InpaintPairDataset(BaseDataset):
+         self.mask_paths = {}
+         for mask_type in mask_flist_paths_dict:
+             #print(mask_type)
++
+             assert mask_type in ALLMASKTYPES
+             if 'random' in mask_type:
+                 self.mask_paths[mask_type] = ['' for i in self.img_paths]
+             else:
+                 with open(mask_flist_paths_dict[mask_type]) as f:
+                     self.mask_paths[mask_type] = f.read().splitlines()
++            """
++            """
+ 
+         self.resize_shape = resize_shape
+         self.random_bbox_shape = random_bbox_shape
+@@ -429,6 +459,11 @@ class InpaintPairDataset(BaseDataset):
+         """
+         Read Masks now only support bbox
+         """
++        mask = Image.open(path)
++        return mask
++        # return Image.fromarray(mask)
++        # return Image.fromarray(np.tile(mask,(1,1,3)).astype(np.uint8))
++
+         if mask_type == 'random':
+             bbox = InpaintDataset.random_bbox(self.resize_shape, self.random_bbox_margin, self.random_bbox_shape)
+         elif mask_type == 'random_free_form':
+@@ -463,6 +498,8 @@ class NoriInpaintDataset(NoriBaseDataset):
+ 
+         self.img_nori_list, self.img_cls_ids, self.img_nr = self.initialize_nori(img_nori_list_path, img_nori_path)
+ 
++        # print(mask_flist_paths_dict)
++
+         # self.mask_nori_lists = {}
+         # self.mask_nrs = {}
+         # for mask_type in mask_nori_list_paths_dict:
+diff --git a/models/loss.py b/models/loss.py
+index a3ea0de..0af5765 100644
+--- a/models/loss.py
++++ b/models/loss.py
+@@ -166,6 +166,7 @@ class ReconLoss(torch.nn.Module):
+ 
+     def forward(self, imgs, coarse_imgs, recon_imgs, masks):
+         masks_viewed = masks.view(masks.size(0), -1)
++        # print('masks_mean: ', masks.size(0), masks_viewed.mean(1))
+         return self.rhole_alpha*torch.mean(torch.abs(imgs - recon_imgs) * masks / masks_viewed.mean(1).view(-1,1,1,1))  + \
+                 self.runhole_alpha*torch.mean(torch.abs(imgs - recon_imgs) * (1. - masks) / (1. - masks_viewed.mean(1).view(-1,1,1,1)))  + \
+                 self.chole_alpha*torch.mean(torch.abs(imgs - coarse_imgs) * masks / masks_viewed.mean(1).view(-1,1,1,1))   + \
+diff --git a/models/sa_gan.py b/models/sa_gan.py
+index b8f9f93..1ec12a7 100644
+--- a/models/sa_gan.py
++++ b/models/sa_gan.py
+@@ -157,6 +157,7 @@ class InpaintSANet(torch.nn.Module):
+ 
+             GatedConv2dWithActivation(4*cnum, 4*cnum, 3, 1, dilation=16, padding=get_pad(64, 3, 1, 16))
+         )
++        # self.refine_attn = Self_Attn(4*cnum, 'relu', with_attn=True)
+         self.refine_attn = Self_Attn(4*cnum, 'relu', with_attn=False)
+         self.refine_upsample_net = nn.Sequential(
+             GatedConv2dWithActivation(4*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
+@@ -170,6 +171,7 @@ class InpaintSANet(torch.nn.Module):
+             #Self_Attn(cnum, 'relu'),
+             GatedConv2dWithActivation(cnum//2, 3, 3, 1, padding=get_pad(256, 3, 1), activation=None),
+         )
++        self.ww = nn.Tanh()
+ 
+ 
+     def forward(self, imgs, masks, img_exs=None):
+@@ -181,6 +183,9 @@ class InpaintSANet(torch.nn.Module):
+             input_imgs = torch.cat([masked_imgs, img_exs, masks, torch.full_like(masks, 1.)], dim=1)
+         #print(input_imgs.size(), imgs.size(), masks.size())
+         x = self.coarse_net(input_imgs)
++        # print(x.detach().min(), x.detach().max())
++        x = self.ww(x)
++        # print(x.detach().min(), x.detach().max())
+         x = torch.clamp(x, -1., 1.)
+         coarse_x = x
+         # Refine
+@@ -190,11 +195,14 @@ class InpaintSANet(torch.nn.Module):
+         else:
+             input_imgs = torch.cat([masked_imgs, img_exs, masks, torch.full_like(masks, 1.)], dim=1)
+         x = self.refine_conv_net(input_imgs)
+-        x= self.refine_attn(x)
++        x = self.refine_attn(x)
++        # x, attention = self.refine_attn(x)
+         #print(x.size(), attention.size())
+         x = self.refine_upsample_net(x)
++        x = self.ww(x)
+         x = torch.clamp(x, -1., 1.)
+-        return coarse_x, x
++        return coarse_x, x#, attention
++        # return coarse_x, x, attention
+ 
+ class InpaintSADirciminator(nn.Module):
+     def __init__(self):
+diff --git a/train_sagan.py b/train_sagan.py
+index 59a54c5..326e2c9 100644
+--- a/train_sagan.py
++++ b/train_sagan.py
+@@ -1,4 +1,5 @@
+ import torch
++from torch import autograd
+ import torch.nn as nn
+ import torch.nn.functional as F
+ #from models.gatedconv import InpaintGCNet, InpaintDirciminator
+@@ -70,7 +71,9 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, dataloader, epoc
+         masks = masks['val']
+         #masks = (masks > 0).type(torch.FloatTensor)
+ 
+-        imgs, masks = imgs.to(device), masks.to(device)
++        imgs, masks = imgs.to(device), masks.to(device)    
++        masks = 1 - masks / 255.0
++        # 1 for masks    
+         imgs = (imgs / 127.5 - 1)
+         # mask is 1 on masked region
+         # forward
+@@ -114,7 +117,7 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, dataloader, epoc
+             #          'val/coarse_imgs':img2photo(coarse_imgs),
+             #          'val/recon_imgs':img2photo(recon_imgs),
+             #          'val/comp_imgs':img2photo(complete_imgs),
+-            info['val/whole_imgs/{}'.format(i)] = img2photo(torch.cat([ imgs * (1 - masks), coarse_imgs, recon_imgs, imgs, complete_imgs], dim=3))
++            info['val/whole_imgs/{}'.format(i)] = img2photo(torch.cat([ imgs * (1 - masks) + masks, coarse_imgs, recon_imgs, imgs * masks, complete_imgs, imgs], dim=3))
+ 
+         else:
+             logger.info("Validation Epoch {0}, [{1}/{2}]: Batch Time:{batch_time.val:.4f},\t Data Time:{data_time.val:.4f},\t Whole Gen Loss:{whole_loss.val:.4f}\t,"
+@@ -160,18 +163,26 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, dataloader, epoch,
+     end = time.time()
+     for i, (imgs, masks) in enumerate(dataloader):
+         data_time.update(time.time() - end)
+-        masks = masks['random_free_form']
++        masks = masks['mine']
++        # masks = masks['random_free_form']
+ 
+         # Optimize Discriminator
+         optD.zero_grad(), netD.zero_grad(), netG.zero_grad(), optG.zero_grad()
+ 
+         imgs, masks = imgs.to(device), masks.to(device)
++        # print(imgs.shape)
++        masks = 1 - masks / 255.0 
++        # masks = masks / 255.0 
++        # 1 for masks, areas with holes
++        # print(masks.min(), masks.max())
+         imgs = (imgs / 127.5 - 1)
+         # mask is 1 on masked region
+ 
+-        coarse_imgs, recon_imgs, attention = netG(imgs, masks)
++        coarse_imgs, recon_imgs = netG(imgs, masks)
++        # coarse_imgs, recon_imgs, attention = netG(imgs, masks)
+         #print(attention.size(), )
+         complete_imgs = recon_imgs * masks + imgs * (1 - masks)
++        # print(imgs.cpu().detach().max(), imgs.cpu().detach().min(), recon_imgs.cpu().detach().max(), recon_imgs.cpu().detach().min(), masks.cpu().detach().max(), masks.cpu().detach().min(), complete_imgs.cpu().detach().max(), complete_imgs.cpu().detach().min())
+ 
+         pos_imgs = torch.cat([imgs, masks, torch.full_like(masks, 1.)], dim=1)
+         neg_imgs = torch.cat([complete_imgs, masks, torch.full_like(masks, 1.)], dim=1)
+@@ -203,10 +214,12 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, dataloader, epoch,
+ 
+         optG.step()
+ 
++        # print('w?', imgs.min(), imgs.max())
+ 
+         # Update time recorder
+         batch_time.update(time.time() - end)
+ 
++        # print(((imgs+1)*127.5).min(), ((imgs+1)*127.5).max())
+         if (i+1) % config.SUMMARY_FREQ == 0:
+             # Logger logging
+             logger.info("Epoch {0}, [{1}/{2}]: Batch Time:{batch_time.val:.4f},\t Data Time:{data_time.val:.4f}, Whole Gen Loss:{whole_loss.val:.4f}\t,"
+@@ -223,13 +236,14 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, dataloader, epoch,
+                 tensorboardlogger.scalar_summary('avg_'+tag, value.avg, epoch*len(dataloader)+i)
+ 
+             def img2photo(imgs):
++                # return ((imgs+1)*127.5).detach().cpu().numpy()
+                 return ((imgs+1)*127.5).transpose(1,2).transpose(2,3).detach().cpu().numpy()
+             # info = { 'train/ori_imgs':img2photo(imgs),
+             #          'train/coarse_imgs':img2photo(coarse_imgs),
+             #          'train/recon_imgs':img2photo(recon_imgs),
+             #          'train/comp_imgs':img2photo(complete_imgs),
+             info = {
+-                     'train/whole_imgs':img2photo(torch.cat([ imgs * (1 - masks), coarse_imgs, recon_imgs, imgs, complete_imgs], dim=3))
++                     'train/whole_imgs':img2photo(torch.cat([ imgs * (1 - masks) + masks, coarse_imgs, recon_imgs, imgs * masks, complete_imgs, imgs], dim=3))
+                      }
+ 
+             for tag, images in info.items():
+@@ -262,13 +276,14 @@ def main():
+                                     random_bbox_margin=config.RANDOM_BBOX_MARGIN,
+                                     random_ff_setting=config.RANDOM_FF_SETTING)
+     val_loader = val_dataset.loader(batch_size=1, shuffle=False,
+-                                        num_workers=1)
+-    #print(len(val_loader))
++                                        num_workers=16)
++    print(len(val_loader))
+ 
+     ### Generate a new val data
+     val_datas = []
+     j = 0
+     for i, data in enumerate(val_loader):
++        # print(i)
+         if j < config.STATIC_VIEW_SIZE:
+             imgs = data[0]
+             if imgs.size(1) == 3:
+@@ -276,7 +291,9 @@ def main():
+                 j += 1
+         else:
+             break
+-    #val_datas = [(imgs, masks) for imgs, masks in val_loader]
++    """
++    """
++    # val_datas = [(imgs, masks) for imgs, masks in val_loader]
+ 
+     val_loader = val_dataset.loader(batch_size=1, shuffle=False,
+                                         num_workers=1)
+@@ -313,7 +330,8 @@ def main():
+         #validate(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, val_loader, i, device=cuda0)
+ 
+         #train data
+-        train(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, train_loader, i, device=cuda0, val_datas=val_datas)
++        with autograd.detect_anomaly():
++            train(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, train_loader, i, device=cuda0, val_datas=val_datas)
+ 
+         # validate
+         validate(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, val_datas, i, device=cuda0)

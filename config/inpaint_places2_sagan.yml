@@ -1,19 +1,21 @@
 #Dataset and Loading Setting
-DATASET: 'places2'  # 'tmnist', 'dtd', 'places2', 'celeba', 'imagenet', 'cityscapes'
-MASKDATASET: 'irrmask'
-MASK_TYPES: ['random_free_form']
+DATASET: 'inpainting'  # 'tmnist', 'dtd', 'places2', 'celeba', 'imagenet', 'cityscapes'
+MASKDATASET: 'mymask'
+MASK_TYPES: ['mine']
+# MASK_TYPES: ['random_free_form']
 RANDOM_CROP: False
 MASKFROMFILE: False
-LOG_DIR: full_model_places2_sa_bn_256
+LOG_DIR: full_model_syn_sa_bn_352
 MODEL_RESTORE: '' #'201809200859_full_model_places2_256/epoch_1_ckpt.pth.tar'  # '20180115220926508503_jyugpu0_places2_NORMAL_wgan_gp_full_model'
 
 #overall setting
 GAN: 'sn_pgan'  # 'dcgan', 'lsgan', 'wgan_gp', 'one_wgan_gp'
 PRETRAIN_COARSE_NETWORK: False
-IMG_SHAPES: [256, 256]
+IMG_SHAPES: [352, 352]
+# IMG_SHAPES: [256, 256]
 RANDOM_BBOX_SHAPE: [32, 32]
 RANDOM_BBOX_MARGIN: [64, 64]
-BATCH_SIZE: 4
+BATCH_SIZE: 2 # 4 for 352, 8 for 256
 RANDOM_SEED: False
 PADDING: 'SAME'
 BATCH_NORM: True
@@ -38,6 +40,7 @@ GRADIENT_CLIP_VALUE: 0.1
 SUMMARY_FREQ: 50
 VAL_SUMMARY_FREQ: 5000
 LEARNING_RATE: 0.0001
+# LEARNING_RATE: 0.0001
 WEIGHT_DECAY: 0.0
 
 #validate
@@ -67,6 +70,10 @@ SPATIAL_DISCOUNTING_GAMMA: 0.9
 
 # data
 DATA_FLIST:
+  inpainting: [
+    '/home/xudejia/inpainting/data/train_img_list.txt',
+    '/home/xudejia/inpainting/data/val_img_list.txt'
+  ]
   # https://github.com/JiahuiYu/progressive_growing_of_gans_tf
   celebahq: [
     'data/celeba_hq/train_shuffled.flist',
@@ -87,6 +94,22 @@ DATA_FLIST:
     'data/imagenet/train_shuffled.flist',
     'data/imagenet/validation_static_view.flist',
   ]
+  mymask:
+    mine:
+      [
+        '/home/xudejia/inpainting/data/train_mask_list.txt',
+        '/home/xudejia/inpainting/data/train_mask_list.txt'
+      ]
+    random_free_form:
+      [
+        '/home/xudejia/inpainting/data/train_mask_list.txt',
+        '/home/xudejia/inpainting/data/train_mask_list.txt'
+      ]
+    val:
+      [
+        '/home/xudejia/inpainting/data/val_mask_list.txt',
+        '/home/xudejia/inpainting/data/val_mask_list.txt'
+      ]
   irrmask:
       random_free_form:
           [
