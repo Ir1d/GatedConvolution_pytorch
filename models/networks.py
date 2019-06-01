@@ -92,7 +92,8 @@ class SNGatedConv2dWithActivation(torch.nn.Module):
         self.conv2d = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
         self.mask_conv2d = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
         self.activation = activation
-        self.batch_norm = batch_norm
+        self.batch_norm = False
+        # self.batch_norm = batch_norm
         self.batch_norm2d = torch.nn.BatchNorm2d(out_channels)
         self.sigmoid = torch.nn.Sigmoid()
         self.conv2d = torch.nn.utils.spectral_norm(self.conv2d)

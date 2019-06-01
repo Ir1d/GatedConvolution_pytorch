@@ -3,3 +3,4 @@ __pycache__
 logs/
 model_logs/
 result_logs/
+bak/

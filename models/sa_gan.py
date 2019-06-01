@@ -205,11 +205,11 @@ class InpaintSANet(torch.nn.Module):
         #print(x.size(), attention.size())
         x = self.refine_upsample_net(x)
         # x = self.ww(x)
-        x = torch.clamp(x, -1., 1.)
-        stacked = torch.cat([coarse_x, x], dim=1)
+        refined = torch.clamp(x, -1., 1.)
+        stacked = torch.cat([coarse_x, refined], dim=1)
         x = self.ff(stacked)
         x = torch.clamp(x, -1., 1.)
-        return coarse_x, x#, attention
+        return coarse_x, refined, x#, attention
         # return coarse_x, x, attention
 
 class InpaintSADirciminator(nn.Module):
