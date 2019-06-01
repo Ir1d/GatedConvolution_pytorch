@@ -5,17 +5,17 @@ MASK_TYPES: ['mine']
 # MASK_TYPES: ['random_free_form']
 RANDOM_CROP: False
 MASKFROMFILE: False
-LOG_DIR: full_model_syn_sa_bn_352
+LOG_DIR: 256_w1x1_wo_mask_info
 MODEL_RESTORE: '' #'201809200859_full_model_places2_256/epoch_1_ckpt.pth.tar'  # '20180115220926508503_jyugpu0_places2_NORMAL_wgan_gp_full_model'
 
 #overall setting
 GAN: 'sn_pgan'  # 'dcgan', 'lsgan', 'wgan_gp', 'one_wgan_gp'
 PRETRAIN_COARSE_NETWORK: False
-IMG_SHAPES: [352, 352]
-# IMG_SHAPES: [256, 256]
+# IMG_SHAPES: [352, 352]
+IMG_SHAPES: [256, 256]
 RANDOM_BBOX_SHAPE: [32, 32]
 RANDOM_BBOX_MARGIN: [64, 64]
-BATCH_SIZE: 2 # 4 for 352, 8 for 256
+BATCH_SIZE: 6 # 4 for 352, 8 for 256
 RANDOM_SEED: False
 PADDING: 'SAME'
 BATCH_NORM: True
@@ -38,8 +38,8 @@ GRADS_SUMMARY: False
 GRADIENT_CLIP: False
 GRADIENT_CLIP_VALUE: 0.1
 SUMMARY_FREQ: 50
-VAL_SUMMARY_FREQ: 5000
-LEARNING_RATE: 0.0001
+VAL_SUMMARY_FREQ: 50000
+LEARNING_RATE: 0.001
 # LEARNING_RATE: 0.0001
 WEIGHT_DECAY: 0.0
 

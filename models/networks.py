@@ -131,7 +131,7 @@ class SNGatedDeConv2dWithActivation(torch.nn.Module):
 
     def forward(self, input):
         #print(input.size())
-        x = F.interpolate(input, scale_factor=2)
+        x = F.interpolate(input, scale_factor=2) # self.scale_factor
         return self.conv2d(x)
 
 class SNConvWithActivation(torch.nn.Module):

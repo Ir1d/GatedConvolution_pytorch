@@ -58,12 +58,20 @@ class InpaintDataset(BaseDataset):
 
     def __getitem__(self, index):
         # create the paths for images and masks
+        # print(index)
 
         img_path = self.img_paths[index]
         error = 1
         while not os.path.isfile(img_path) or error == 1:
             try:
-                img = self.transforms_fun(self.read_img(img_path))
+                # img = self.transforms_fun(self.read_img(img_path))
+                # print('reading img')
+                img, img_gray = self.read_img(img_path)
+                # print('read img')
+                img = img.resize((256, 256), Image.ANTIALIAS)
+                img_gray = img_gray.resize((256, 256), Image.ANTIALIAS)
+                img = self.transforms_fun(img) * 255
+                img_gray = self.transforms_fun(img_gray) * 255
                 error = 0
             except:
                 index = np.random.randint(0, high=len(self))
@@ -72,29 +80,30 @@ class InpaintDataset(BaseDataset):
 
         mask_paths = {}
         for mask_type in self.mask_paths:
+            # print(len(self.mask_paths[mask_type]))
             # print(mask_type, index)
-            index = np.random.randint(0, len(self.mask_paths))
+            index = np.random.randint(0, len(self.mask_paths[mask_type]))
             # index = index % len(self.mask_paths)
             mask_paths[mask_type] = self.mask_paths[mask_type][index]
-
-        img = self.transforms_fun(self.read_img(img_path)) * 255
-
-        masks = {mask_type:255*self.transforms_fun(self.read_mask(mask_paths[mask_type], mask_type))[:1, :,:] for mask_type in mask_paths}
+        mask = self.read_mask(mask_paths[mask_type], mask_type)
+        mask = mask.resize((256, 256), Image.ANTIALIAS)
+        masks = {mask_type:255*self.transforms_fun(mask)[:1, :,:] for mask_type in mask_paths}
 
         # print(img.max(), img.min(), masks['val'].max(), masks['val'].min())
         # masks['val'][ masks['val'] < 128 ] = 0
         # masks['val'][ masks['val'] > 128 ] = 255
-        return img, masks
+        return img, masks, img_gray
 
     def read_img(self, path):
         """
         Read Image
         """
         img = Image.open(path)#.convert("RGB")
-        img = np.stack((img,)*3, axis=-1)
+        gray = img.convert('L')
+        gray = np.stack((gray,)*3, axis=-1)
         # print(img.shape)
-        img = Image.fromarray(img.astype(np.uint8))
-        return img
+        gray = Image.fromarray(gray.astype(np.uint8))
+        return img, gray
 
 
     def read_mask(self, path, mask_type):

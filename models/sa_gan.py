@@ -112,7 +112,7 @@ class InpaintSANet(torch.nn.Module):
         cnum = 32
         self.coarse_net = nn.Sequential(
             #input is 5*256*256, but it is full convolution network, so it can be larger than 256
-            GatedConv2dWithActivation(n_in_channel, cnum, 5, 1, padding=get_pad(256, 5, 1)),
+            GatedConv2dWithActivation(3, cnum, 5, 1, padding=get_pad(256, 5, 1)),
             # downsample 128
             GatedConv2dWithActivation(cnum, 2*cnum, 4, 2, padding=get_pad(256, 4, 2)),
             GatedConv2dWithActivation(2*cnum, 2*cnum, 3, 1, padding=get_pad(128, 3, 1)),
@@ -141,7 +141,7 @@ class InpaintSANet(torch.nn.Module):
 
         self.refine_conv_net = nn.Sequential(
             # input is 5*256*256
-            GatedConv2dWithActivation(n_in_channel, cnum, 5, 1, padding=get_pad(256, 5, 1)),
+            GatedConv2dWithActivation(3, cnum, 5, 1, padding=get_pad(256, 5, 1)),
             # downsample
             GatedConv2dWithActivation(cnum, cnum, 4, 2, padding=get_pad(256, 4, 2)),
             GatedConv2dWithActivation(cnum, 2*cnum, 3, 1, padding=get_pad(128, 3, 1)),
@@ -172,34 +172,42 @@ class InpaintSANet(torch.nn.Module):
             GatedConv2dWithActivation(cnum//2, 3, 3, 1, padding=get_pad(256, 3, 1), activation=None),
         )
         self.ww = nn.Tanh()
+        self.ff = nn.Conv2d(6, 3, 1)
 
-
-    def forward(self, imgs, masks, img_exs=None):
+    def forward(self, gray, masks, img_exs=None):
         # Coarse
-        masked_imgs =  imgs * (1 - masks) + masks
-        if img_exs == None:
-            input_imgs = torch.cat([masked_imgs, masks, torch.full_like(masks, 1.)], dim=1)
-        else:
-            input_imgs = torch.cat([masked_imgs, img_exs, masks, torch.full_like(masks, 1.)], dim=1)
-        #print(input_imgs.size(), imgs.size(), masks.size())
+        masked_imgs =  gray * (1 - masks) + masks
+        # if img_exs == None:
+        #     input_imgs = torch.cat([masked_imgs, masks, torch.full_like(masks, 1.)], dim=1)
+        # else:
+        #     input_imgs = torch.cat([masked_imgs, img_exs, masks, torch.full_like(masks, 1.)], dim=1)
+        input_imgs = torch.cat([masked_imgs], dim=1)
+        #print(input_imgs.size(), gray.size(), masks.size())
+        # print('input_size', input_imgs.size())
         x = self.coarse_net(input_imgs)
         # print(x.detach().min(), x.detach().max())
-        x = self.ww(x)
+        # x = self.ww(x)
         # print(x.detach().min(), x.detach().max())
         x = torch.clamp(x, -1., 1.)
         coarse_x = x
         # Refine
-        masked_imgs = imgs * (1 - masks) + coarse_x * masks
-        if img_exs is None:
-            input_imgs = torch.cat([masked_imgs, masks, torch.full_like(masks, 1.)], dim=1)
-        else:
-            input_imgs = torch.cat([masked_imgs, img_exs, masks, torch.full_like(masks, 1.)], dim=1)
+        # masked_imgs = gray * (1 - masks) + coarse_x * masks
+        masked_imgs = coarse_x
+        # if img_exs is None:
+        #     input_imgs = torch.cat([masked_imgs, masks, torch.full_like(masks, 1.)], dim=1)
+        # else:
+            # input_imgs = torch.cat([masked_imgs, img_exs, masks, torch.full_like(masks, 1.)], dim=1)
+            
+        input_imgs = torch.cat([masked_imgs], dim=1)
         x = self.refine_conv_net(input_imgs)
         x = self.refine_attn(x)
         # x, attention = self.refine_attn(x)
         #print(x.size(), attention.size())
         x = self.refine_upsample_net(x)
-        x = self.ww(x)
+        # x = self.ww(x)
+        x = torch.clamp(x, -1., 1.)
+        stacked = torch.cat([coarse_x, x], dim=1)
+        x = self.ff(stacked)
         x = torch.clamp(x, -1., 1.)
         return coarse_x, x#, attention
         # return coarse_x, x, attention
