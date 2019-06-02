@@ -71,3 +71,17 @@ def ssim(img1, img2, window_size = 11, size_average = True):
     window = window.type_as(img1)
 
     return _ssim(img1, img2, window, window_size, channel, size_average)
+
+
+def _sssim(img1, img2, window_size = 11, size_average = True):
+    # print(img1.shape)
+    (_, channel, _, _) = img1.shape # numpy
+    # (_, _, channel) = img1.shape # numpy
+    window = create_window(window_size, channel)
+
+    # if img1.is_cuda:
+        # window = window.cuda(img1.get_device())
+    window = window.type_as(img1)
+
+    return _ssim(img1, img2, window, window_size, channel, size_average)
+

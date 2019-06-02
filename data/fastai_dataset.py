@@ -91,12 +91,16 @@ class InpaintDataset(BaseDataset):
             mask_paths[mask_type] = self.mask_paths[mask_type][index]
         mask = self.read_mask(mask_paths[mask_type], mask_type)
         mask = mask.resize((256, 256), Image.ANTIALIAS)
-        masks = {mask_type:255*self.transforms_fun(mask)[:1, :,:] for mask_type in mask_paths}
+        img = (img / 127.5 - 1)
+        img_gray = (img_gray / 127.5 - 1)
+        masks = 1 - self.transforms_fun(mask)[:1, :,:]
+        # masks = {mask_type:1 - self.transforms_fun(mask)[:1, :,:] for mask_type in mask_paths}
+        # masks = {mask_type:255*self.transforms_fun(mask)[:1, :,:] for mask_type in mask_paths}
 
         # print(img.max(), img.min(), masks['val'].max(), masks['val'].min())
         # masks['val'][ masks['val'] < 128 ] = 0
         # masks['val'][ masks['val'] > 128 ] = 255
-        return img, masks, img_gray
+        return [img, masks, img_gray], [img, masks]
 
     def read_img(self, path):
         """
