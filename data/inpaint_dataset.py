@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import cv2
+import random
 import os
 from torchvision import transforms
 from PIL import Image
@@ -50,31 +51,37 @@ class InpaintDataset(BaseDataset):
         self.random_ff_setting = random_ff_setting
         self.random_bbox_number = random_bbox_number
         self.transform_initialize(resize_shape, transforms_oprs)
-
+        self.len = len(self.img_paths)
 
 
     def __len__(self):
-        return len(self.img_paths)
+        return 8000
+        # return len(self.img_paths)
 
     def __getitem__(self, index):
         # create the paths for images and masks
         # print(index)
+        index = index % self.len
 
         img_path = self.img_paths[index]
         error = 1
         while not os.path.isfile(img_path) or error == 1:
             try:
                 # img = self.transforms_fun(self.read_img(img_path))
-                # print('reading img')
+                # print('reading img', img_path)
                 img, img_gray = self.read_img(img_path)
+                a, b = img.size
+                L, R = random.randint(0, a - 1024), random.randint(0, b - 1024)
+                img = img.crop((L, R, L + 1024, R + 1024))
                 # print('read img')
                 img = img.resize((256, 256), Image.ANTIALIAS)
                 img_gray = img_gray.resize((256, 256), Image.ANTIALIAS)
                 img = self.transforms_fun(img) * 255
                 img_gray = self.transforms_fun(img_gray) * 255
                 error = 0
-            except:
-                index = np.random.randint(0, high=len(self))
+            except Exception as e:
+                # print(e)
+                index = np.random.randint(0, high=self.len)
                 img_path = self.img_paths[index]
                 error = 1
 
@@ -100,9 +107,10 @@ class InpaintDataset(BaseDataset):
         """
         img = Image.open(path)#.convert("RGB")
         gray = img.convert('L')
-        gray = np.stack((gray,)*3, axis=-1)
+        # print(gray.shape)
+        # gray = np.stack((gray,)*3, axis=-1)
         # print(img.shape)
-        gray = Image.fromarray(gray.astype(np.uint8))
+        # gray = Image.fromarray(gray.astype(np.uint8))
         return img, gray
 
 

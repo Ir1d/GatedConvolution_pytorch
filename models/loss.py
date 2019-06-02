@@ -4,9 +4,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .cx_loss import CX_loss, symetric_CX_loss
 from .vgg import vgg16
+from util.config import Config
 from torch.autograd import Variable
 from math import exp
+config = Config('config/inpaint_places2_sagan.yml')
 
+mn = torch.tensor([[[ 0.4824]], [[ 0.4588]], [[ 0.4078]]]).to(torch.device('cuda:{}'.format(config.GPU_ID))).unsqueeze(0)
+# mn = [0.4850196078431373, 0.457956862745098, 0.4076039215686274] # RGB
 
 def gaussian(window_size, sigma):
     gauss = torch.Tensor([exp(-(x - window_size//2)**2/float(2*sigma**2)) for x in range(window_size)])
@@ -70,15 +74,24 @@ class NewLoss(torch.nn.Module):
     def __init__(self):
         super(NewLoss, self).__init__()
         self.l1 = nn.L1Loss()
-        vgg = vgg16(pretrained=True).cuda()
+        vgg = vgg16(pretrained=True).to(torch.device('cuda:{}'.format(config.GPU_ID)))
         self.p = PerceptualLoss(feat_extractors=vgg)
         self.s = SSIM()
-    def forward(self, coarse, output, gt):
-        l1 = 2 * self.l1(output, gt) + self.l1(coarse, gt)
-        # perc = self.p(gt, output)
-        ssim = self.s(output, gt)
+    def forward(self, coarse, refined, mixed, gt):
+        # print('coarse', coarse.detach().size())
+        # print('refined', refined.detach().size())
+        # print('mixed', mixed.detach().size())
+        # print('gt', gt.detach().size())
+        l1 = 3 * self.l1(mixed, gt) + 2 * self.l1(refined, gt) + self.l1(coarse, gt)
+        # perc = self.p(gt, mixed)
+        ssim = self.s(mixed, gt)
+        gt_ = (gt + 1) / 2 - mn # [-1,1] -> [0,1]
+        mixed_ = (mixed + 1) / 2 - mn # [-1,1] -> [0,1]
+        # perc = self.p(gt_, mixed_)
         # return l1 + perc - ssim + 5
+        # return l1 + 1 - ssim + perc
         return l1 + 1 - ssim
+
 
 class TVLoss(torch.nn.Module):
     """
