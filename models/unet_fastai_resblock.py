@@ -116,6 +116,98 @@ class Interpolate(nn.Module):
         # x = self.interp(x, scale_factor=self.factor, align_corners=True)
         return x
 
+class Swish(nn.Module):
+    def __init__(self, factor):
+        super(Swish, self).__init__()
+        
+    def forward(self, x):
+        return x * F.sigmoid(x)
+
+
+class ResidualBlock(nn.Module):
+    def __init__(self, in_features):
+        super(ResidualBlock, self).__init__()
+
+        conv_block = [nn.ReflectionPad2d(1),
+                      nn.Conv2d(in_features, in_features, 3),
+                      
+                      nn.LeakyReLU(0.2, inplace=True),
+                      nn.ReflectionPad2d(1),
+                      nn.Conv2d(in_features, in_features, 3)
+                      ]
+
+        self.conv_block = nn.Sequential(*conv_block)
+
+    def forward(self, x):
+        return x + self.conv_block(x)
+
+class Generator(nn.Module):
+    # originally 9 resblocks
+    def __init__(self, input_nc, output_nc, n_residual_blocks=9):
+        super(Generator, self).__init__()
+
+        # Initial convolution block
+        model = [nn.ReflectionPad2d(1),
+                 nn.Conv2d(input_nc, 64, 3),
+                 nn.LeakyReLU(0.2, inplace=True)]
+
+        # Downsampling
+        in_features = 64
+        out_features = in_features*2
+        for _ in range(2):
+            self.add_module('down' + str(_+1), 
+                nn.Sequential(nn.Conv2d(in_features, out_features, 3, stride=2, padding=1),
+                    nn.LeakyReLU(0.2, inplace=True))
+            )
+            # model += [nn.Conv2d(in_features, out_features, 3, stride=2, padding=1),
+                    #   nn.LeakyReLU(0.2, inplace=True)]
+            in_features = out_features
+            out_features = in_features*2
+
+        # Residual blocks
+        model1 = []
+        for _ in range(n_residual_blocks):
+            model1 += [ResidualBlock(in_features)]
+
+        # Upsampling
+        out_features = in_features//2
+        for _ in range(2):
+            self.add_module('up' + str(_+1), 
+                nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),
+                      nn.Conv2d(in_features, out_features, 3, stride=1, padding=1),
+                      nn.LeakyReLU(0.2, inplace=True))
+            )
+            # model += [nn.Upsample(scale_factor=2, mode='nearest'),
+            #           nn.Conv2d(in_features, out_features, 3, stride=1, padding=1),
+            #           nn.LeakyReLU(0.2, inplace=True)]
+            in_features = out_features
+            out_features = in_features//2
+
+        # Output layer
+        model2 = [nn.ReflectionPad2d(1),
+                  nn.Conv2d(64, output_nc, 3),
+                  nn.Tanh()
+        ]
+        self.model = nn.Sequential(*model)
+        self.model1 = nn.Sequential(*model1)
+        self.model2 = nn.Sequential(*model2)
+
+        self.relu = nn.ReLU()
+        self.sig = nn.Sigmoid()
+        self.tan = nn.Tanh()
+    def forward(self, input):
+        x = self.model(input)
+        map1 = self.down1(x)
+        map2 = self.down2(map1)
+
+        x = self.model1(map2)
+
+        x = self.up1(x + map2)
+        x = self.up2(x + map1)
+
+        x = self.model2(x)
+        return x
+
 class InpaintSANet(torch.nn.Module):
     """
     Inpaint generator, input should be 5*256*256, where 3*256*256 is the masked image, 1*256*256 for mask, 1*256*256 is the guidence
@@ -189,11 +281,15 @@ class InpaintSANet(torch.nn.Module):
             nn.Conv2d(2*cnum, 2*cnum, 4, 2, padding=get_pad(128, 4, 2)),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(2*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.resBlock1 = nn.Sequential(
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.resBlock2 = nn.Sequential(
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, dilation=2, padding=get_pad(64, 3, 1, 2)),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, dilation=4, padding=get_pad(64, 3, 1, 4)),
@@ -247,8 +343,13 @@ class InpaintSANet(torch.nn.Module):
         )
         self.ww = nn.Tanh()
         self.ff = nn.Conv2d(4, 3, 1)
+        self.unet = Generator(1, 3)
 
-    def forward(self, gray, masks, img_exs=None):
+    def forward(self, imgs, masks, gray, img_exs=None):
+        # print(len(_))
+        # for x in ww:
+        #     print(x.shape)
+        # imgs, masks, gray = ww
         # Coarse
         masked_imgs =  gray * (1 - masks) + masks
         if img_exs == None:
@@ -273,11 +374,17 @@ class InpaintSANet(torch.nn.Module):
             # input_imgs = torch.cat([masked_imgs, img_exs, masks, torch.full_like(masks, 1.)], dim=1)
             
         input_imgs = torch.cat([masked_imgs], dim=1)
-        # input_imgs = torch.cat([masked_imgs, gray], dim=1)
+        """
         map_1 = self.refine_conv_net1(input_imgs) # before downsample
         map_2 = self.refine_conv_net2(map_1) # downsample 1x
         
         x = self.refine_conv_net3(map_2)
+        y = self.resBlock1(x)
+        x = x + y
+        y = self.resBlock2(x)
+        x = x + y
+        # change the bottleneck layers to resBlock
+
         x = self.refine_attn(x)
         # x, attention = self.refine_attn(x)
         #print(x.size(), attention.size())
@@ -286,6 +393,8 @@ class InpaintSANet(torch.nn.Module):
         x = self.refine_upsample_net2(x)
         x = torch.cat([x, map_1], dim=1) # before downsample (original size)
         x = self.refine_upsample_net3(x)
+        """
+        x = self.unet(input_imgs)
         # x = self.ww(x)
         refined = torch.clamp(x, -1., 1.)
         stacked = torch.cat([coarse_x, refined], dim=1)

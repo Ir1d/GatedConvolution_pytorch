@@ -5,7 +5,7 @@ MASK_TYPES: ['mine']
 # MASK_TYPES: ['random_free_form']
 RANDOM_CROP: False
 MASKFROMFILE: False
-LOG_DIR: 256_wo_mask_info_wo_d_sanet
+LOG_DIR: unet_withD
 MODEL_RESTORE: '' #'201809200859_full_model_places2_256/epoch_1_ckpt.pth.tar'  # '20180115220926508503_jyugpu0_places2_NORMAL_wgan_gp_full_model'
 
 #overall setting
@@ -15,7 +15,8 @@ PRETRAIN_COARSE_NETWORK: False
 IMG_SHAPES: [256, 256]
 RANDOM_BBOX_SHAPE: [32, 32]
 RANDOM_BBOX_MARGIN: [64, 64]
-BATCH_SIZE: 8 # 4 for 352, 8 for 256
+BATCH_SIZE: 4 # 4 for 256 with D
+# BATCH_SIZE: 8 # 4 for 352, 8 for 256
 RANDOM_SEED: False
 PADDING: 'SAME'
 BATCH_NORM: True
@@ -32,14 +33,14 @@ RANDOM_FF_SETTING:
     mbw: 10
 # training
 NUM_GPUS: 1
-GPU_ID: 0  # -1 indicate select any available one, otherwise select gpu ID, e.g. [0,1,3]
-EPOCH: 50
+GPU_ID: 3  # -1 indicate select any available one, otherwise select gpu ID, e.g. [0,1,3]
+EPOCH: 100
 GRADS_SUMMARY: False
 GRADIENT_CLIP: False
 GRADIENT_CLIP_VALUE: 0.1
 SUMMARY_FREQ: 12
 VAL_SUMMARY_FREQ: 50000
-LEARNING_RATE: 0.0001
+LEARNING_RATE: 0.00005
 # LEARNING_RATE: 0.0001
 WEIGHT_DECAY: 0.0
 

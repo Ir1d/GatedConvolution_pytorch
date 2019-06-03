@@ -29,13 +29,14 @@ class InpaintDataset(BaseDataset):
     def __init__(self, img_flist_path, mask_flist_paths_dict,
                 resize_shape=(256, 256), transforms_oprs=['random_crop', 'to_tensor'],
                 random_bbox_shape=(32, 32), random_bbox_margin=(64, 64),
-                random_ff_setting={'img_shape':[256,256],'mv':5, 'ma':4.0, 'ml':40, 'mbw':10}, random_bbox_number=5):
+                random_ff_setting={'img_shape':[256,256],'mv':5, 'ma':4.0, 'ml':40, 'mbw':10}, random_bbox_number=5, val=False):
 
         print(mask_flist_paths_dict)
         with open(img_flist_path, 'r') as f:
             self.img_paths = f.read().splitlines()
 
         self.mask_paths = {}
+        self.val = val
         for mask_type in mask_flist_paths_dict:
             #print(mask_type)
             assert mask_type in ALLMASKTYPES
@@ -55,6 +56,8 @@ class InpaintDataset(BaseDataset):
 
 
     def __len__(self):
+        if self.val:
+            return 100
         return 8000
         # return len(self.img_paths)
 

@@ -157,6 +157,74 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloade
         end = time.time()
 
 
+def pretrainD(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, epoch, device=cuda0, val_datas=None):
+    """
+    Train Phase, for training and spectral normalization patch gan in
+    Free-Form Image Inpainting with Gated Convolution (snpgan)
+
+    """
+    logger.info("Pretraining D epoch %d"%epoch)
+    netG.to(device)
+    netD.to(device)
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+    losses = {"g_loss":AverageMeter(), "r_loss":AverageMeter(), "whole_loss":AverageMeter(), "d_loss":AverageMeter(), 'n_loss': AverageMeter()}
+
+    netG.train()
+    netD.train()
+    end = time.time()
+    for i, (imgs, masks, gray) in enumerate(dataloader):
+        data_time.update(time.time() - end)
+        masks = masks['mine']
+        # masks = masks['random_free_form']
+
+        # Optimize Discriminator
+        optD.zero_grad(), netD.zero_grad(), netG.zero_grad(), optG.zero_grad()
+
+        imgs, masks, gray = imgs.to(device), masks.to(device), gray.to(device)
+        # print(imgs.shape)
+        masks = 1 - masks / 255.0 
+        # masks = masks / 255.0 
+        # 1 for masks, areas with holes
+        # print(masks.min(), masks.max())
+        imgs = (imgs / 127.5 - 1)
+        gray = (gray / 127.5 - 1)
+        # mask is 1 on masked region
+
+        coarse_imgs, refined, mixed = netG(gray, masks)
+        # coarse_imgs, mixed = netG(imgs, masks)
+        # coarse_imgs, mixed, attention = netG(imgs, masks)
+        #print(attention.size(), )
+        # complete_imgs = mixed * masks + imgs * (1 - masks)
+        complete_imgs = mixed # * masks + imgs * (1 - masks)
+        # print(imgs.cpu().detach().max(), imgs.cpu().detach().min(), mixed.cpu().detach().max(), mixed.cpu().detach().min(), masks.cpu().detach().max(), masks.cpu().detach().min(), complete_imgs.cpu().detach().max(), complete_imgs.cpu().detach().min())
+
+        pos_imgs = imgs
+        neg_imgs = complete_imgs
+        # pos_imgs = torch.cat([imgs], dim=1)
+        # pos_imgs = torch.cat([imgs, masks, torch.full_like(masks, 1.)], dim=1)
+        # neg_imgs = torch.cat([complete_imgs], dim=1)
+        # neg_imgs = torch.cat([complete_imgs, masks, torch.full_like(masks, 1.)], dim=1)
+        pos_neg_imgs = torch.cat([pos_imgs, neg_imgs], dim=0)
+
+        pred_pos_neg = netD(pos_neg_imgs)
+        pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
+        d_loss = DLoss(pred_pos, pred_neg)
+        losses['d_loss'].update(d_loss.item(), imgs.size(0))
+        d_loss.backward(retain_graph=True)
+
+        optD.step()
+        batch_time.update(time.time() - end)
+
+        if (i+1) % config.SUMMARY_FREQ == 0:
+            logger.info("Epoch {0}, [{1}/{2}]: Batch Time:{batch_time.val:.4f},\t Data Time:{data_time.val:.4f}, \t D Loss: {d_loss.val:.4f}"
+                        .format(epoch, i+1, len(dataloader), batch_time=batch_time, data_time=data_time, d_loss=losses['d_loss']))
+                        # , n_loss=losses['n_loss']))
+            # Tensorboard logger for scaler and images
+            # info_terms = {'WGLoss':whole_loss.item(), 'ReconLoss':r_loss.item()}
+            # info_terms = {'WGLoss':whole_loss.item(), 'ReconLoss':r_loss.item(), "GANLoss":g_loss.item(), "DLoss":d_loss.item()}
+
+
 def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, epoch, device=cuda0, val_datas=None):
     """
     Train Phase, for training and spectral normalization patch gan in
@@ -204,29 +272,29 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, 
         # neg_imgs = torch.cat([complete_imgs, masks, torch.full_like(masks, 1.)], dim=1)
         # pos_neg_imgs = torch.cat([pos_imgs, neg_imgs], dim=0)
 
-        # pred_pos_neg = netD(pos_neg_imgs)
-        # pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
-        # d_loss = DLoss(pred_pos, pred_neg)
-        # losses['d_loss'].update(d_loss.item(), imgs.size(0))
-        # d_loss.backward(retain_graph=True)
+        pred_pos_neg = netD(pos_neg_imgs)
+        pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
+        d_loss = DLoss(pred_pos, pred_neg)
+        losses['d_loss'].update(d_loss.item(), imgs.size(0))
+        d_loss.backward(retain_graph=True)
 
-        # optD.step()
+        optD.step()
 
 
         # Optimize Generator
-        # optD.zero_grad(), netD.zero_grad()
+        optD.zero_grad(), netD.zero_grad()
         optG.zero_grad(), netG.zero_grad()
-        # pred_neg = netD(neg_imgs)
-        #pred_pos, pred_neg = torch.chunk(pred_pos_neg,  2, dim=0)
-        # g_loss = GANLoss(pred_neg)
+        pred_neg = netD(neg_imgs)
+        pred_pos, pred_neg = torch.chunk(pred_pos_neg,  2, dim=0)
+        g_loss = GANLoss(pred_neg)
         r_loss = ReconLoss(imgs, coarse_imgs, mixed, masks)
         n_loss = NLoss(coarse_imgs, refined, mixed, imgs)
 
-        whole_loss = r_loss + n_loss
-        # whole_loss = g_loss + r_loss + n_loss
+        # whole_loss = r_loss + n_loss
+        whole_loss = g_loss + r_loss + n_loss
 
         # Update the recorder for losses
-        # losses['g_loss'].update(g_loss.item(), imgs.size(0))
+        losses['g_loss'].update(g_loss.item(), imgs.size(0))
         losses['r_loss'].update(r_loss.item(), imgs.size(0))
         losses['n_loss'].update(n_loss.item(), imgs.size(0))
         losses['whole_loss'].update(whole_loss.item(), imgs.size(0))
@@ -247,11 +315,11 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, 
             logger.info("Epoch {0}, [{1}/{2}]: Batch Time:{batch_time.val:.4f},\t Data Time:{data_time.val:.4f}, Whole Gen Loss:{whole_loss.val:.4f}\t,"
                         "Recon Loss:{r_loss.val:.4f}, \t New Loss: {n_loss.val:.4f}"
                         .format(epoch, i+1, len(dataloader), batch_time=batch_time, data_time=data_time, whole_loss=losses['whole_loss'], r_loss=losses['r_loss'] \
-                        , n_loss=losses['n_loss']))
-                        # ,g_loss=losses['g_loss'], d_loss=losses['d_loss'], n_loss=losses['n_loss']))
+                        ,g_loss=losses['g_loss'], d_loss=losses['d_loss'], n_loss=losses['n_loss']))
+                        # , n_loss=losses['n_loss']))
             # Tensorboard logger for scaler and images
-            info_terms = {'WGLoss':whole_loss.item(), 'ReconLoss':r_loss.item()}
-            # info_terms = {'WGLoss':whole_loss.item(), 'ReconLoss':r_loss.item(), "GANLoss":g_loss.item(), "DLoss":d_loss.item()}
+            # info_terms = {'WGLoss':whole_loss.item(), 'ReconLoss':r_loss.item()}
+            info_terms = {'WGLoss':whole_loss.item(), 'ReconLoss':r_loss.item(), "GANLoss":g_loss.item(), "DLoss":d_loss.item()}
 
             for tag, value in info_terms.items():
                 tensorboardlogger.scalar_summary(tag, value, epoch*len(dataloader)+i)
@@ -299,7 +367,7 @@ def main():
                                     {mask_type:config.DATA_FLIST[config.MASKDATASET][mask_type][1] for mask_type in ('val',)}, \
                                     resize_shape=tuple(config.IMG_SHAPES), random_bbox_shape=config.RANDOM_BBOX_SHAPE, \
                                     random_bbox_margin=config.RANDOM_BBOX_MARGIN,
-                                    random_ff_setting=config.RANDOM_FF_SETTING)
+                                    random_ff_setting=config.RANDOM_FF_SETTING, val=True)
     val_loader = val_dataset.loader(batch_size=1, shuffle=False,
                                         num_workers=16)
     print(len(val_loader))
@@ -338,7 +406,7 @@ def main():
         logger.info("Loading pretrained models from {} ...".format(config.MODEL_RESTORE))
     
     logger.info('Loading weights')
-    whole_model_path = 'bak/unet_epoch50.pth.tar'
+    whole_model_path = 'bak/unet_100.pth.tar'
     nets = torch.load(whole_model_path)
     netG_state_dict = nets['netG_state_dict']
     netG.load_state_dict(netG_state_dict)
@@ -359,8 +427,14 @@ def main():
     logger.info("Start Training...")
     epoch = 50
 
+    
+    validate(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, val_loader, 0, device=cuda0)
+    for i in range(10):
+        pretrainD(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, train_loader, i, device=cuda0, val_datas=val_datas) # the G was trained with 100 epochs.
+        
+
     for i in range(epoch):
-        #validate(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, val_loader, i, device=cuda0)
+        #validate(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, val_loader, i, device=cuda0)
 
         #train data
         # with autograd.detect_anomaly():
