@@ -419,7 +419,8 @@ def main():
     new_loss = NewLoss()
     lr, decay = config.LEARNING_RATE, config.WEIGHT_DECAY
     optG = torch.optim.Adam(netG.parameters(), lr=lr, weight_decay=decay)
-    optD = torch.optim.Adam(netD.parameters(), lr=4*lr, weight_decay=decay)
+    optD = torch.optim.Adam(netD.parameters(), lr=lr, weight_decay=decay)
+    # optD = torch.optim.Adam(netD.parameters(), lr=4*lr, weight_decay=decay)
 
     logger.info("Finish Define the Network Structure and Losses")
 
