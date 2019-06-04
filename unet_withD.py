@@ -266,11 +266,11 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, 
         complete_imgs = mixed # * masks + imgs * (1 - masks)
         # print(imgs.cpu().detach().max(), imgs.cpu().detach().min(), mixed.cpu().detach().max(), mixed.cpu().detach().min(), masks.cpu().detach().max(), masks.cpu().detach().min(), complete_imgs.cpu().detach().max(), complete_imgs.cpu().detach().min())
 
-        # pos_imgs = imgs
-        # neg_imgs = complete_imgs
+        pos_imgs = imgs
+        neg_imgs = complete_imgs
         # pos_imgs = torch.cat([imgs, masks, torch.full_like(masks, 1.)], dim=1)
         # neg_imgs = torch.cat([complete_imgs, masks, torch.full_like(masks, 1.)], dim=1)
-        # pos_neg_imgs = torch.cat([pos_imgs, neg_imgs], dim=0)
+        pos_neg_imgs = torch.cat([pos_imgs, neg_imgs], dim=0)
 
         pred_pos_neg = netD(pos_neg_imgs)
         pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
@@ -313,7 +313,7 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, 
             # Logger logging
                         # "Recon Loss:{r_loss.val:.4f},\t GAN Loss:{g_loss.val:.4f},\t D Loss:{d_loss.val:.4f}, \t New Loss: {n_loss.val:.4f}"
             logger.info("Epoch {0}, [{1}/{2}]: Batch Time:{batch_time.val:.4f},\t Data Time:{data_time.val:.4f}, Whole Gen Loss:{whole_loss.val:.4f}\t,"
-                        "Recon Loss:{r_loss.val:.4f}, \t New Loss: {n_loss.val:.4f}"
+                        "Recon Loss:{r_loss.val:.4f}, \t New Loss: {n_loss.val:.4f}, \t D Loss: {d_loss.val:.4f}"
                         .format(epoch, i+1, len(dataloader), batch_time=batch_time, data_time=data_time, whole_loss=losses['whole_loss'], r_loss=losses['r_loss'] \
                         ,g_loss=losses['g_loss'], d_loss=losses['d_loss'], n_loss=losses['n_loss']))
                         # , n_loss=losses['n_loss']))
@@ -429,9 +429,9 @@ def main():
     epoch = 50
 
     
-    validate(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, val_loader, 0, device=cuda0)
-    for i in range(10):
-        pretrainD(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, train_loader, i, device=cuda0, val_datas=val_datas) # the G was trained with 100 epochs.
+    # validate(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, val_loader, 0, device=cuda0)
+    # for i in range(10):
+    #     pretrainD(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, train_loader, i, device=cuda0, val_datas=val_datas) # the G was trained with 100 epochs.
         
 
     for i in range(epoch):

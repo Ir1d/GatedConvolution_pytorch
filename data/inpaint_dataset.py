@@ -107,8 +107,12 @@ class InpaintDataset(BaseDataset):
         """
         img = Image.open(path)#.convert("RGB")
         a, b = img.size
-        L, R = random.randint(0, a - 1024), random.randint(0, b - 1024)
-        img = img.crop((L, R, L + 1024, R + 1024))
+        if self.val:
+            L, R = 0, 0
+            img = img.crop((L, R, L + 1024, R + 1024))
+        else:
+            L, R = random.randint(0, a - 1024), random.randint(0, b - 1024)
+            img = img.crop((L, R, L + 1024, R + 1024))
         gray = img.convert('L')
         # print(gray.shape)
         # gray = np.stack((gray,)*3, axis=-1)

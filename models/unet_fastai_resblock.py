@@ -46,7 +46,7 @@ class SAGenerator(nn.Module):
     """Generator."""
 
     def __init__(self, batch_size, image_size=64, z_dim=100, conv_dim=64):
-        super(Generator, self).__init__()
+        super(SAGenerator, self).__init__()
         self.imsize = image_size
         layer1 = []
         layer2 = []
@@ -117,7 +117,7 @@ class Interpolate(nn.Module):
         return x
 
 class Swish(nn.Module):
-    def __init__(self, factor):
+    def __init__(self):
         super(Swish, self).__init__()
         
     def forward(self, x):
@@ -149,7 +149,8 @@ class Generator(nn.Module):
         # Initial convolution block
         model = [nn.ReflectionPad2d(1),
                  nn.Conv2d(input_nc, 64, 3),
-                 nn.LeakyReLU(0.2, inplace=True)]
+                 Swish()]
+                #  nn.LeakyReLU(0.2, inplace=True)]
 
         # Downsampling
         in_features = 64
@@ -157,8 +158,9 @@ class Generator(nn.Module):
         for _ in range(2):
             self.add_module('down' + str(_+1), 
                 nn.Sequential(nn.Conv2d(in_features, out_features, 3, stride=2, padding=1),
-                    nn.LeakyReLU(0.2, inplace=True))
+                    Swish())
             )
+                    # nn.LeakyReLU(0.2, inplace=True))
             # model += [nn.Conv2d(in_features, out_features, 3, stride=2, padding=1),
                     #   nn.LeakyReLU(0.2, inplace=True)]
             in_features = out_features
@@ -175,8 +177,9 @@ class Generator(nn.Module):
             self.add_module('up' + str(_+1), 
                 nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),
                       nn.Conv2d(in_features, out_features, 3, stride=1, padding=1),
-                      nn.LeakyReLU(0.2, inplace=True))
+                      Swish())
             )
+                    #   nn.LeakyReLU(0.2, inplace=True))
             # model += [nn.Upsample(scale_factor=2, mode='nearest'),
             #           nn.Conv2d(in_features, out_features, 3, stride=1, padding=1),
             #           nn.LeakyReLU(0.2, inplace=True)]
