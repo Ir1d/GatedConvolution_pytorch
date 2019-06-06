@@ -176,7 +176,7 @@ class Generator(nn.Module):
         for _ in range(2):
             self.add_module('up' + str(_+1), 
                 nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),
-                      nn.Conv2d(in_features, out_features, 3, stride=1, padding=1),
+                      nn.Conv2d(in_features * 2, out_features, 3, stride=1, padding=1),
                       Swish())
             )
                     #   nn.LeakyReLU(0.2, inplace=True))
@@ -205,8 +205,11 @@ class Generator(nn.Module):
 
         x = self.model1(map2)
 
-        x = self.up1(x + map2)
-        x = self.up2(x + map1)
+        x = torch.cat([x, map2], dim=1)
+        x = self.up1(x)
+
+        x = torch.cat([x, map1], dim=1)
+        x = self.up2(x)
 
         x = self.model2(x)
         return x
