@@ -406,10 +406,11 @@ def main():
         logger.info("Loading pretrained models from {} ...".format(config.MODEL_RESTORE))
     
     logger.info('Loading weights')
-    whole_model_path = 'bak/unet_100.pth.tar'
+    whole_model_path = 'bak/unet_150.pth.tar'
     nets = torch.load(whole_model_path)
-    netG_state_dict = nets['netG_state_dict']
+    netG_state_dict, netD_state_dict = nets['netG_state_dict'], nets['netD_state_dict']
     netG.load_state_dict(netG_state_dict)
+    netD.load_state_dict(netD_state_dict)
     logger.info('Finished loading from %s'%whole_model_path)
 
     # Define loss
