@@ -12,8 +12,8 @@ def conv1d(ni:int, no:int, ks:int=1, stride:int=1, padding:int=0, bias:bool=Fals
     conv = nn.Conv1d(ni, no, ks, stride=stride, padding=padding, bias=bias)
     nn.init.kaiming_normal_(conv.weight)
     if bias: conv.bias.data.zero_()
-    return (conv)
-    # return spectral_norm(conv)
+    # return (conv)
+    return spectral_norm(conv)
 
 class SelfAttention(nn.Module):
     "Self attention layer for nd."
