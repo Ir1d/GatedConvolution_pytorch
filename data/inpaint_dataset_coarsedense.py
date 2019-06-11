@@ -61,10 +61,10 @@ class InpaintDataset(BaseDataset):
         return 8000
         # return len(self.img_paths)
 
-    def __getitem__(self, index):
+    def __getitem__(self, idx):
         # create the paths for images and masks
         # print(index)
-        index = index % self.len
+        index = idx % self.len
 
         img_path = self.img_paths[index]
         error = 1
@@ -73,11 +73,11 @@ class InpaintDataset(BaseDataset):
                 # img = self.transforms_fun(self.read_img(img_path))
                 # print('reading img', img_path)
                 img, img_gray = self.read_img(img_path)
-                # print('read img')
                 img = img.resize((256, 256), Image.ANTIALIAS)
                 img_gray = img_gray.resize((256, 256), Image.ANTIALIAS)
                 img = self.transforms_fun(img) * 255
                 img_gray = self.transforms_fun(img_gray) * 255
+                # print('read img')
                 error = 0
             except Exception as e:
                 # print(e)
@@ -90,7 +90,7 @@ class InpaintDataset(BaseDataset):
             # print(len(self.mask_paths[mask_type]))
             # print(mask_type, index)
             if self.val:
-                np.random.seed(index)
+                np.random.seed(idx)
             index = np.random.randint(0, len(self.mask_paths[mask_type]))
             # index = index % len(self.mask_paths)
             mask_paths[mask_type] = self.mask_paths[mask_type][index]
