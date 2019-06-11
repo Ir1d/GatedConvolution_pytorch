@@ -7,7 +7,8 @@ from models.sa_gan_unet import InpaintSANet, InpaintSADirciminator
 from models.loss import SNDisLoss, SNGenLoss, ReconLoss, NewLoss
 from util.logger import TensorBoardLogger
 from util.config import Config
-from data.inpaint_dataset import InpaintDataset
+from data.inpaint_dataset_coarsedense import InpaintDataset
+# from data.inpaint_dataset import InpaintDataset
 from util.evaluation import AverageMeter
 from evaluation import metrics
 from PIL import Image
@@ -338,7 +339,7 @@ def main():
         logger.info("Loading pretrained models from {} ...".format(config.MODEL_RESTORE))
     
     logger.info('Loading weights')
-    whole_model_path = 'bak/unet_epoch50.pth.tar'
+    whole_model_path = 'bak/unet_200_withD.pth.tar'
     nets = torch.load(whole_model_path)
     netG_state_dict, netD_state_dict = nets['netG_state_dict'], nets['netD_state_dict']
     netG.load_state_dict(netG_state_dict)

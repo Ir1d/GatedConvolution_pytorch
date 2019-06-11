@@ -57,7 +57,7 @@ class InpaintDataset(BaseDataset):
 
     def __len__(self):
         if self.val:
-            return 100
+            return 1000
         return 8000
         # return len(self.img_paths)
 

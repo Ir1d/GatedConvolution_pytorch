@@ -7,6 +7,7 @@ from .vgg import vgg16
 from util.config import Config
 from torch.autograd import Variable
 from math import exp
+# config = Config('config/saunet.yml')
 config = Config('config/inpaint_places2_sagan.yml')
 
 mn = torch.tensor([[[ 0.4824]], [[ 0.4588]], [[ 0.4078]]]).to(torch.device('cuda:{}'.format(config.GPU_ID))).unsqueeze(0)
