@@ -58,13 +58,13 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloade
     netD.train()
     end = time.time()
     val_save_dir = os.path.join(result_dir, "val_{}_{}".format(epoch, batch_n if isinstance(batch_n, str) else batch_n+1))
-    val_save_real_dir = os.path.join(val_save_dir, "real")
-    val_save_gen_dir = os.path.join(val_save_dir, "gen")
-    val_save_inf_dir = os.path.join(val_save_dir, "inf")
+    val_save_real_dir = os.path.join(val_save_dir, "gt")
+    val_save_gen_dir = os.path.join(val_save_dir, "output")
+    val_save_input_dir = os.path.join(val_save_dir, "input")
     if not os.path.exists(val_save_real_dir):
         os.makedirs(val_save_real_dir)
         os.makedirs(val_save_gen_dir)
-        os.makedirs(val_save_inf_dir)
+        os.makedirs(val_save_input_dir)
     info = {}
     for i, (imgs, masks, gray) in enumerate(dataloader):
 
@@ -119,33 +119,41 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloade
         # Logger logging
 
 
+        def img2photo(imgs):
+            return ((imgs+1)*127.5).transpose(1,2).transpose(2,3).detach().cpu().numpy()
+        
         if i+1 < config.STATIC_VIEW_SIZE:
 
-            def img2photo(imgs):
-                return ((imgs+1)*127.5).transpose(1,2).transpose(2,3).detach().cpu().numpy()
             # info = { 'val/ori_imgs':img2photo(imgs),
             #          'val/coarse_imgs':img2photo(coarse_imgs),
             #          'val/mixed':img2photo(mixed),
             #          'val/comp_imgs':img2photo(complete_imgs),
-            info['val/whole_imgs/{}'.format(i)] = img2photo(torch.cat([imgs * (1 - masks) + masks, refined, imgs * masks, complete_imgs, imgs], dim=3))
+            info['val/whole_imgs/{}'.format(i)] = img2photo(torch.cat([imgs * (1 - masks) + masks, complete_imgs, imgs], dim=3))
 
         else:
+            info['val/whole_imgs/{}'.format(i)] = img2photo(torch.cat([imgs * (1 - masks) + masks, complete_imgs, imgs], dim=3))
+            # save the last batch
             logger.info("Validation Epoch {0}, [{1}/{2}]: Batch Time:{batch_time.val:.4f},\t Data Time:{data_time.val:.4f},\t Whole Gen Loss:{whole_loss.val:.4f}\t,"
                         "Recon Loss:{r_loss.val:.4f},\t GAN Loss:{g_loss.val:.4f},\t D Loss:{d_loss.val:.4f}, \t New Loss: {n_loss.val:.4f}"
                         .format(epoch, i+1, len(dataloader), batch_time=batch_time, data_time=data_time, whole_loss=losses['whole_loss'], r_loss=losses['r_loss'] \
                         ,g_loss=losses['g_loss'], d_loss=losses['d_loss'], n_loss=losses['n_loss']))
             j = 0
             for tag, images in info.items():
-                h, w = images.shape[1], images.shape[2] // 5
+                h, w = images.shape[1], images.shape[2] // 3
                 for val_img in images:
-                    real_img = val_img[:,(3*w):(4*w),:]
-                    gen_img = val_img[:,(4*w):,:]
+                    input_img = val_img[:,:(w),:]
+                    real_img = val_img[:,(-w):,:]
+                    gen_img = val_img[:,w:-w,:]
+                    input_img = Image.fromarray(input_img.astype(np.uint8))
                     real_img = Image.fromarray(real_img.astype(np.uint8))
                     gen_img = Image.fromarray(gen_img.astype(np.uint8))
+                    input_img.save(os.path.join(val_save_input_dir, "{}.png".format(j)))
                     real_img.save(os.path.join(val_save_real_dir, "{}.png".format(j)))
                     gen_img.save(os.path.join(val_save_gen_dir, "{}.png".format(j)))
                     j += 1
-                tensorboardlogger.image_summary(tag, images, epoch)
+                    # print(j)
+                if ((j + 1) % 100 == 0):
+                    tensorboardlogger.image_summary(tag, images, epoch)
             path1, path2 = val_save_real_dir, val_save_gen_dir
             fid_score = metrics['fid']([path1, path2], cuda=False)
             ssim_score = metrics['ssim']([path1, path2])
@@ -300,8 +308,8 @@ def main():
                                     {mask_type:config.DATA_FLIST[config.MASKDATASET][mask_type][1] for mask_type in ('val',)}, \
                                     resize_shape=tuple(config.IMG_SHAPES), random_bbox_shape=config.RANDOM_BBOX_SHAPE, \
                                     random_bbox_margin=config.RANDOM_BBOX_MARGIN,
-                                    random_ff_setting=config.RANDOM_FF_SETTING)
-    val_loader = val_dataset.loader(batch_size=1, shuffle=False,
+                                    random_ff_setting=config.RANDOM_FF_SETTING,val=True)
+    val_loader = val_dataset.loader(batch_size=batch_size, shuffle=False,
                                         num_workers=16)
     print(len(val_loader))
     val_datas = val_loader
