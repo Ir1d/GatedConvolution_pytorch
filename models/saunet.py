@@ -97,13 +97,15 @@ class InpaintSANet(torch.nn.Module):
             # input is 5*256*256
             nn.Conv2d(1, cnum, 5, 1, padding=get_pad(256, 5, 1)),
             nn.LeakyReLU(0.2, inplace=True),
+            SelfAttention(cnum)
         )
         self.refine_conv_net2 = nn.Sequential(
             # downsample
             nn.Conv2d(cnum, cnum, 4, 2, padding=get_pad(256, 4, 2)),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(cnum, 2*cnum, 3, 1, padding=get_pad(128, 3, 1)),
-            nn.LeakyReLU(0.2, inplace=True)
+            nn.LeakyReLU(0.2, inplace=True),
+            SelfAttention(2*cnum)
         )
         self.refine_conv_net3 = nn.Sequential(
             # downsample
@@ -111,22 +113,27 @@ class InpaintSANet(torch.nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(2*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
+            SelfAttention(4*cnum),
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
+            SelfAttention(4*cnum),
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, dilation=2, padding=get_pad(64, 3, 1, 2)),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, dilation=4, padding=get_pad(64, 3, 1, 4)),
             nn.LeakyReLU(0.2, inplace=True),
+            SelfAttention(4*cnum),
             #Self_Attn(4*cnum, 'relu'),
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, dilation=8, padding=get_pad(64, 3, 1, 8)),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(4*cnum, 4*cnum, 3, 1, dilation=16, padding=get_pad(64, 3, 1, 16))
+            nn.Conv2d(4*cnum, 4*cnum, 3, 1, dilation=16, padding=get_pad(64, 3, 1, 16)),
+            SelfAttention(4*cnum)
         )
 
         # self.refine_attn = Self_Attn(4*cnum, 'relu', with_attn=True)
-        self.refine_attn = Self_Attn(4*cnum, 'relu', with_attn=False)
+        self.refine_attn = SelfAttention(4*cnum)
+        # self.refine_attn = Self_Attn(4*cnum, 'relu', with_attn=False)
         """
         self.refine_upsample_net = nn.Sequential(
             GatedConv2dWithActivation(4*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
@@ -148,6 +155,7 @@ class InpaintSANet(torch.nn.Module):
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
             Interpolate(2),
+            SelfAttention(4*cnum),
             nn.Conv2d(4*cnum, 2*cnum, 3, 1, padding=get_pad(128, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True)
         )
@@ -156,6 +164,7 @@ class InpaintSANet(torch.nn.Module):
             nn.Conv2d(2*cnum + 2 * cnum, 2*cnum, 3, 1, padding=get_pad(128, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
             Interpolate(2),
+            SelfAttention(2*cnum),
             nn.Conv2d(2*cnum, cnum, 3, 1, padding=get_pad(256, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True)
         )
@@ -163,6 +172,7 @@ class InpaintSANet(torch.nn.Module):
             # cnum channels from skip connection (map1)
             nn.Conv2d(cnum + cnum, cnum//2, 3, 1, padding=get_pad(256, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
+            SelfAttention(cnum//2),
             #Self_Attn(cnum, 'relu'),
             nn.Conv2d(cnum//2, 3, 3, 1, padding=get_pad(256, 3, 1)),
         )
@@ -199,7 +209,7 @@ class InpaintSANet(torch.nn.Module):
         map_2 = self.refine_conv_net2(map_1) # downsample 1x
         
         x = self.refine_conv_net3(map_2)
-        x = self.refine_attn(x)
+        # x = self.refine_attn(x)
         # x, attention = self.refine_attn(x)
         #print(x.size(), attention.size())
         x = self.refine_upsample_net1(x)
@@ -227,7 +237,7 @@ class InpaintSADirciminator(nn.Module):
             SNConvWithActivation(8*cnum, 8*cnum, 4, 2, padding=get_pad(32, 5, 2)),
             SNConvWithActivation(8*cnum, 8*cnum, 4, 2, padding=get_pad(16, 5, 2)),
             SNConvWithActivation(8*cnum, 8*cnum, 4, 2, padding=get_pad(8, 5, 2)),
-            Self_Attn(8*cnum, 'relu'),
+            SelfAttention(8*cnum, 'relu'),
             SNConvWithActivation(8*cnum, 8*cnum, 4, 2, padding=get_pad(4, 5, 2)),
         )
         self.linear = nn.Linear(8*cnum*2*2, 1)
