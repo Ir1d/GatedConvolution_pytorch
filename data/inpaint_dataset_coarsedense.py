@@ -57,14 +57,14 @@ class InpaintDataset(BaseDataset):
 
     def __len__(self):
         if self.val:
-            return 100
+            return 1000
         return 8000
         # return len(self.img_paths)
 
-    def __getitem__(self, index):
+    def __getitem__(self, idx):
         # create the paths for images and masks
         # print(index)
-        index = index % self.len
+        index = idx % self.len
 
         img_path = self.img_paths[index]
         error = 1
@@ -73,11 +73,11 @@ class InpaintDataset(BaseDataset):
                 # img = self.transforms_fun(self.read_img(img_path))
                 # print('reading img', img_path)
                 img, img_gray = self.read_img(img_path)
-                # print('read img')
                 img = img.resize((256, 256), Image.ANTIALIAS)
                 img_gray = img_gray.resize((256, 256), Image.ANTIALIAS)
                 img = self.transforms_fun(img) * 255
                 img_gray = self.transforms_fun(img_gray) * 255
+                # print('read img')
                 error = 0
             except Exception as e:
                 # print(e)
@@ -89,6 +89,8 @@ class InpaintDataset(BaseDataset):
         for mask_type in self.mask_paths:
             # print(len(self.mask_paths[mask_type]))
             # print(mask_type, index)
+            if self.val:
+                np.random.seed(idx)
             index = np.random.randint(0, len(self.mask_paths[mask_type]))
             # index = index % len(self.mask_paths)
             mask_paths[mask_type] = self.mask_paths[mask_type][index]
@@ -108,7 +110,7 @@ class InpaintDataset(BaseDataset):
         img = Image.open(path)#.convert("RGB")
         a, b = img.size
         if self.val:
-            L, R = 0, 0
+            L, R = a//2-512, b//2-512
             img = img.crop((L, R, L + 1024, R + 1024))
         else:
             L, R = random.randint(0, a - 1024), random.randint(0, b - 1024)
@@ -251,14 +253,11 @@ class InpaintDataset(BaseDataset):
     @staticmethod
     def random_bbox(shape, margin, bbox_shape):
         """Generate a random tlhw with configuration.
-
         Args:
             config: Config should have configuration including IMG_SHAPES,
                 VERTICAL_MARGIN, HEIGHT, HORIZONTAL_MARGIN, WIDTH.
-
         Returns:
             tuple: (top, left, height, width)
-
         """
         img_height = shape[0]
         img_width = shape[1]
@@ -275,11 +274,9 @@ class InpaintDataset(BaseDataset):
     @staticmethod
     def random_ff_mask(config):
         """Generate a random free form mask with configuration.
-
         Args:
             config: Config should have configuration including IMG_SHAPES,
                 VERTICAL_MARGIN, HEIGHT, HORIZONTAL_MARGIN, WIDTH.
-
         Returns:
             tuple: (top, left, height, width)
         """
@@ -309,15 +306,12 @@ class InpaintDataset(BaseDataset):
     @staticmethod
     def bbox2mask(bboxs, shape):
         """Generate mask tensor from bbox.
-
         Args:
             bbox: configuration tuple, (top, left, height, width)
             config: Config should have configuration including IMG_SHAPES,
                 MAX_DELTA_HEIGHT, MAX_DELTA_WIDTH.
-
         Returns:
             tf.Tensor: output with shape [1, H, W, 1]
-
         """
         height, width = shape
         mask = np.zeros(( height, width), np.float32)

@@ -61,10 +61,10 @@ class InpaintDataset(BaseDataset):
         return 8000
         # return len(self.img_paths)
 
-    def __getitem__(self, index):
+    def __getitem__(self, idx):
         # create the paths for images and masks
         # print(index)
-        index = index % self.len
+        index = idx % self.len
 
         img_path = self.img_paths[index]
         error = 1
@@ -89,17 +89,23 @@ class InpaintDataset(BaseDataset):
         for mask_type in self.mask_paths:
             # print(len(self.mask_paths[mask_type]))
             # print(mask_type, index)
+            if self.val:
+                np.random.seed(idx)
             index = np.random.randint(0, len(self.mask_paths[mask_type]))
             # index = index % len(self.mask_paths)
             mask_paths[mask_type] = self.mask_paths[mask_type][index]
         mask = self.read_mask(mask_paths[mask_type], mask_type)
         mask = mask.resize((256, 256), Image.ANTIALIAS)
-        masks = {mask_type:255*self.transforms_fun(mask)[:1, :,:] for mask_type in mask_paths}
+        img = (img / 127.5 - 1)
+        img_gray = (img_gray / 127.5 - 1)
+        masks = 1 - self.transforms_fun(mask)[:1, :,:]
+        # masks = {mask_type:1 - self.transforms_fun(mask)[:1, :,:] for mask_type in mask_paths}
+        # masks = {mask_type:255*self.transforms_fun(mask)[:1, :,:] for mask_type in mask_paths}
 
         # print(img.max(), img.min(), masks['val'].max(), masks['val'].min())
         # masks['val'][ masks['val'] < 128 ] = 0
         # masks['val'][ masks['val'] > 128 ] = 255
-        return img, masks, img_gray
+        return [img, masks, img_gray], [img, masks]
 
     def read_img(self, path):
         """
@@ -108,7 +114,7 @@ class InpaintDataset(BaseDataset):
         img = Image.open(path)#.convert("RGB")
         a, b = img.size
         if self.val:
-            L, R = 0, 0
+            L, R = a//2-512, b//2-512
             img = img.crop((L, R, L + 1024, R + 1024))
         else:
             L, R = random.randint(0, a - 1024), random.randint(0, b - 1024)

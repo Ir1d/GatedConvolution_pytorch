@@ -172,15 +172,19 @@ class InpaintSANet(torch.nn.Module):
             GatedConv2dWithActivation(4*cnum, 4*cnum, 3, 1, dilation=16, padding=get_pad(64, 3, 1, 16))
         )
         """
-        self.refine_conv_net = nn.Sequential(
+        self.refine_conv_net1 = nn.Sequential(
             # input is 5*256*256
             nn.Conv2d(1, cnum, 5, 1, padding=get_pad(256, 5, 1)),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.refine_conv_net2 = nn.Sequential(
             # downsample
             nn.Conv2d(cnum, cnum, 4, 2, padding=get_pad(256, 4, 2)),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(cnum, 2*cnum, 3, 1, padding=get_pad(128, 3, 1)),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.refine_conv_net3 = nn.Sequential(
             # downsample
             nn.Conv2d(2*cnum, 2*cnum, 4, 2, padding=get_pad(128, 4, 2)),
             nn.LeakyReLU(0.2, inplace=True),
@@ -199,6 +203,7 @@ class InpaintSANet(torch.nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, dilation=16, padding=get_pad(64, 3, 1, 16))
         )
+
         # self.refine_attn = Self_Attn(4*cnum, 'relu', with_attn=True)
         self.refine_attn = Self_Attn(4*cnum, 'relu', with_attn=False)
         """
@@ -216,20 +221,26 @@ class InpaintSANet(torch.nn.Module):
         )
         """
         self.Up = Interpolate(2)
-        self.refine_upsample_net = nn.Sequential(
+        self.refine_upsample_net1 = nn.Sequential(
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(4*cnum, 4*cnum, 3, 1, padding=get_pad(64, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
             Interpolate(2),
             nn.Conv2d(4*cnum, 2*cnum, 3, 1, padding=get_pad(128, 3, 1)),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(2*cnum, 2*cnum, 3, 1, padding=get_pad(128, 3, 1)),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.refine_upsample_net2 = nn.Sequential(
+            # cnum channels from skip connection (map2)
+            nn.Conv2d(2*cnum + 2 * cnum, 2*cnum, 3, 1, padding=get_pad(128, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
             Interpolate(2),
             nn.Conv2d(2*cnum, cnum, 3, 1, padding=get_pad(256, 3, 1)),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(cnum, cnum//2, 3, 1, padding=get_pad(256, 3, 1)),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.refine_upsample_net3 = nn.Sequential(
+            # cnum channels from skip connection (map1)
+            nn.Conv2d(cnum + cnum, cnum//2, 3, 1, padding=get_pad(256, 3, 1)),
             nn.LeakyReLU(0.2, inplace=True),
             #Self_Attn(cnum, 'relu'),
             nn.Conv2d(cnum//2, 3, 3, 1, padding=get_pad(256, 3, 1)),
@@ -262,18 +273,25 @@ class InpaintSANet(torch.nn.Module):
             # input_imgs = torch.cat([masked_imgs, img_exs, masks, torch.full_like(masks, 1.)], dim=1)
             
         input_imgs = torch.cat([masked_imgs], dim=1)
-        x = self.refine_conv_net(input_imgs)
+        # input_imgs = torch.cat([masked_imgs, gray], dim=1)
+        map_1 = self.refine_conv_net1(input_imgs) # before downsample
+        map_2 = self.refine_conv_net2(map_1) # downsample 1x
+        
+        x = self.refine_conv_net3(map_2)
         x = self.refine_attn(x)
         # x, attention = self.refine_attn(x)
         #print(x.size(), attention.size())
-        x = self.refine_upsample_net(x)
+        x = self.refine_upsample_net1(x)
+        x = torch.cat([x, map_2], dim=1) # downsample 1x
+        x = self.refine_upsample_net2(x)
+        x = torch.cat([x, map_1], dim=1) # before downsample (original size)
+        x = self.refine_upsample_net3(x)
         # x = self.ww(x)
         refined = torch.clamp(x, -1., 1.)
-        # stacked = torch.cat([coarse_x, refined], dim=1)
-        # x = self.ff(stacked)
-        # x = torch.clamp(x, -1., 1.)
-        # try removing the final 1x1 conv
-        x = refined
+        stacked = torch.cat([coarse_x, refined], dim=1)
+        x = self.ff(stacked)
+        x = torch.clamp(x, -1., 1.)
+        x = F.tanh(x)
         return coarse_x, refined, x#, attention
         # return coarse_x, x, attention
 
@@ -282,7 +300,7 @@ class InpaintSADirciminator(nn.Module):
         super(InpaintSADirciminator, self).__init__()
         cnum = 32
         self.discriminator_net = nn.Sequential(
-            SNConvWithActivation(5, 2*cnum, 4, 2, padding=get_pad(256, 5, 2)),
+            SNConvWithActivation(3, 2*cnum, 4, 2, padding=get_pad(256, 5, 2)),
             SNConvWithActivation(2*cnum, 4*cnum, 4, 2, padding=get_pad(128, 5, 2)),
             SNConvWithActivation(4*cnum, 8*cnum, 4, 2, padding=get_pad(64, 5, 2)),
             SNConvWithActivation(8*cnum, 8*cnum, 4, 2, padding=get_pad(32, 5, 2)),

@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 #from models.gatedconv import InpaintGCNet, InpaintDirciminator
 from models.sa_gan import InpaintSANet, InpaintSADirciminator
-from models.loss import SNDisLoss, SNGenLoss, ReconLoss, NewLoss
+from models.loss import SNDisLoss, SNGenLoss, ReconLoss
 from util.logger import TensorBoardLogger
 from util.config import Config
 from data.inpaint_dataset import InpaintDataset
@@ -41,7 +41,7 @@ def logger_init():
     logger.addHandler(fh)
 
 
-def validate(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, epoch, device=cuda0, batch_n="whole"):
+def validate(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, dataloader, epoch, device=cuda0, batch_n="whole"):
     """
     validate phase
     """
@@ -51,7 +51,7 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloade
     netD.eval()
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = {"g_loss":AverageMeter(), "r_loss":AverageMeter(), "whole_loss":AverageMeter(), "d_loss":AverageMeter(), 'n_loss': AverageMeter()}
+    losses = {"g_loss":AverageMeter(), "r_loss":AverageMeter(), "whole_loss":AverageMeter(), "d_loss":AverageMeter()}
 
     netG.train()
     netD.train()
@@ -79,10 +79,9 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloade
         
         # mask is 1 on masked region
         # forward
-        coarse_imgs, refined, mixed = netG(gray, masks)
-        # coarse_imgs, mixed = netG(imgs, masks)
+        coarse_imgs, recon_imgs = netG(imgs, masks)
 
-        complete_imgs = mixed # * masks + imgs * (1 - masks)
+        complete_imgs = recon_imgs * masks + imgs * (1 - masks)
 
         pos_imgs = torch.cat([imgs, masks, torch.full_like(masks, 1.)], dim=1)
         neg_imgs = torch.cat([complete_imgs, masks, torch.full_like(masks, 1.)], dim=1)
@@ -94,17 +93,13 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloade
 
         g_loss = GANLoss(pred_neg)
 
-        # print(imgs.shape)
-        r_loss = ReconLoss(imgs, coarse_imgs, mixed, masks)
+        r_loss = ReconLoss(imgs, coarse_imgs, recon_imgs, masks)
 
-        n_loss = NLoss(coarse_imgs, refined, mixed, imgs)
-
-        whole_loss = g_loss + r_loss + n_loss
+        whole_loss = g_loss + r_loss
 
         # Update the recorder for losses
         losses['g_loss'].update(g_loss.item(), imgs.size(0))
         losses['r_loss'].update(r_loss.item(), imgs.size(0))
-        losses['n_loss'].update(n_loss.item(), imgs.size(0))
         losses['whole_loss'].update(whole_loss.item(), imgs.size(0))
 
         d_loss = DLoss(pred_pos, pred_neg)
@@ -122,15 +117,15 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloade
                 return ((imgs+1)*127.5).transpose(1,2).transpose(2,3).detach().cpu().numpy()
             # info = { 'val/ori_imgs':img2photo(imgs),
             #          'val/coarse_imgs':img2photo(coarse_imgs),
-            #          'val/mixed':img2photo(mixed),
+            #          'val/recon_imgs':img2photo(recon_imgs),
             #          'val/comp_imgs':img2photo(complete_imgs),
-            info['val/whole_imgs/{}'.format(i)] = img2photo(torch.cat([imgs * (1 - masks) + masks, refined, imgs * masks, complete_imgs, imgs], dim=3))
+            info['val/whole_imgs/{}'.format(i)] = img2photo(torch.cat([ imgs * (1 - masks) + masks, coarse_imgs, recon_imgs, imgs * masks, complete_imgs, imgs], dim=3))
 
         else:
             logger.info("Validation Epoch {0}, [{1}/{2}]: Batch Time:{batch_time.val:.4f},\t Data Time:{data_time.val:.4f},\t Whole Gen Loss:{whole_loss.val:.4f}\t,"
-                        "Recon Loss:{r_loss.val:.4f},\t GAN Loss:{g_loss.val:.4f},\t D Loss:{d_loss.val:.4f}, \t New Loss: {n_loss.val:.4f}"
+                        "Recon Loss:{r_loss.val:.4f},\t GAN Loss:{g_loss.val:.4f},\t D Loss:{d_loss.val:.4f}"
                         .format(epoch, i+1, len(dataloader), batch_time=batch_time, data_time=data_time, whole_loss=losses['whole_loss'], r_loss=losses['r_loss'] \
-                        ,g_loss=losses['g_loss'], d_loss=losses['d_loss'], n_loss=losses['n_loss']))
+                        ,g_loss=losses['g_loss'], d_loss=losses['d_loss']))
             j = 0
             for tag, images in info.items():
                 h, w = images.shape[1], images.shape[2] // 5
@@ -146,16 +141,14 @@ def validate(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloade
             path1, path2 = val_save_real_dir, val_save_gen_dir
             fid_score = metrics['fid']([path1, path2], cuda=False)
             ssim_score = metrics['ssim']([path1, path2])
-            psnr_score = metrics['psnr']([path1, path2])
             tensorboardlogger.scalar_summary('val/fid', fid_score.item(), epoch*len(dataloader)+i)
             tensorboardlogger.scalar_summary('val/ssim', ssim_score.item(), epoch*len(dataloader)+i)
-            tensorboardlogger.scalar_summary('val/psnr', psnr_score, epoch*len(dataloader)+i)
             break
 
         end = time.time()
 
 
-def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, epoch, device=cuda0, val_datas=None):
+def train(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, dataloader, epoch, device=cuda0, val_datas=None):
     """
     Train Phase, for training and spectral normalization patch gan in
     Free-Form Image Inpainting with Gated Convolution (snpgan)
@@ -165,7 +158,7 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, 
     netD.to(device)
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = {"g_loss":AverageMeter(), "r_loss":AverageMeter(), "whole_loss":AverageMeter(), "d_loss":AverageMeter(), 'n_loss': AverageMeter()}
+    losses = {"g_loss":AverageMeter(), "r_loss":AverageMeter(), "whole_loss":AverageMeter(), 'd_loss':AverageMeter()}
 
     netG.train()
     netD.train()
@@ -188,46 +181,39 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, 
         gray = (gray / 127.5 - 1)
         # mask is 1 on masked region
 
-        coarse_imgs, refined, mixed = netG(gray, masks)
-        # coarse_imgs, mixed = netG(imgs, masks)
-        # coarse_imgs, mixed, attention = netG(imgs, masks)
+        coarse_imgs, recon_imgs = netG(gray, masks)
+        # coarse_imgs, recon_imgs = netG(imgs, masks)
+        # coarse_imgs, recon_imgs, attention = netG(imgs, masks)
         #print(attention.size(), )
-        # complete_imgs = mixed * masks + imgs * (1 - masks)
-        complete_imgs = mixed # * masks + imgs * (1 - masks)
-        # print(imgs.cpu().detach().max(), imgs.cpu().detach().min(), mixed.cpu().detach().max(), mixed.cpu().detach().min(), masks.cpu().detach().max(), masks.cpu().detach().min(), complete_imgs.cpu().detach().max(), complete_imgs.cpu().detach().min())
+        complete_imgs = recon_imgs * masks + imgs * (1 - masks)
+        # print(imgs.cpu().detach().max(), imgs.cpu().detach().min(), recon_imgs.cpu().detach().max(), recon_imgs.cpu().detach().min(), masks.cpu().detach().max(), masks.cpu().detach().min(), complete_imgs.cpu().detach().max(), complete_imgs.cpu().detach().min())
 
-        # Optimize Discriminator
-        # pos_imgs = torch.cat([imgs, masks, torch.full_like(masks, 1.)], dim=1)
-        # neg_imgs = torch.cat([complete_imgs, masks, torch.full_like(masks, 1.)], dim=1)
-        # pos_neg_imgs = torch.cat([pos_imgs, neg_imgs], dim=0)
+        pos_imgs = torch.cat([imgs, masks, torch.full_like(masks, 1.)], dim=1)
+        neg_imgs = torch.cat([complete_imgs, masks, torch.full_like(masks, 1.)], dim=1)
+        pos_neg_imgs = torch.cat([pos_imgs, neg_imgs], dim=0)
 
-        # pred_pos_neg = netD(pos_neg_imgs)
-        # pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
-        # d_loss = DLoss(pred_pos, pred_neg)
-        # losses['d_loss'].update(d_loss.item(), imgs.size(0))
-        # d_loss.backward(retain_graph=True)
+        pred_pos_neg = netD(pos_neg_imgs)
+        pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
+        d_loss = DLoss(pred_pos, pred_neg)
+        losses['d_loss'].update(d_loss.item(), imgs.size(0))
+        d_loss.backward(retain_graph=True)
 
-        # optD.step()
+        optD.step()
 
 
         # Optimize Generator
-        # optD.zero_grad(), netD.zero_grad()
-        optG.zero_grad(), netG.zero_grad()
-        # pred_neg = netD(neg_imgs)
+        optD.zero_grad(), netD.zero_grad(), optG.zero_grad(), netG.zero_grad()
+        pred_neg = netD(neg_imgs)
         #pred_pos, pred_neg = torch.chunk(pred_pos_neg,  2, dim=0)
-        # g_loss = GANLoss(pred_neg)
-        r_loss = ReconLoss(imgs, coarse_imgs, mixed, masks)
-        n_loss = NLoss(coarse_imgs, refined, mixed, imgs)
+        g_loss = GANLoss(pred_neg)
+        r_loss = ReconLoss(imgs, coarse_imgs, recon_imgs, masks)
 
-        whole_loss = r_loss + n_loss
-        # whole_loss = g_loss + r_loss + n_loss
+        whole_loss = g_loss + r_loss
 
         # Update the recorder for losses
-        # losses['g_loss'].update(g_loss.item(), imgs.size(0))
+        losses['g_loss'].update(g_loss.item(), imgs.size(0))
         losses['r_loss'].update(r_loss.item(), imgs.size(0))
-        losses['n_loss'].update(n_loss.item(), imgs.size(0))
         losses['whole_loss'].update(whole_loss.item(), imgs.size(0))
-
         whole_loss.backward()
 
         optG.step()
@@ -240,15 +226,12 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, 
         # print(((imgs+1)*127.5).min(), ((imgs+1)*127.5).max())
         if (i+1) % config.SUMMARY_FREQ == 0:
             # Logger logging
-                        # "Recon Loss:{r_loss.val:.4f},\t GAN Loss:{g_loss.val:.4f},\t D Loss:{d_loss.val:.4f}, \t New Loss: {n_loss.val:.4f}"
             logger.info("Epoch {0}, [{1}/{2}]: Batch Time:{batch_time.val:.4f},\t Data Time:{data_time.val:.4f}, Whole Gen Loss:{whole_loss.val:.4f}\t,"
-                        "Recon Loss:{r_loss.val:.4f}, \t New Loss: {n_loss.val:.4f}"
+                        "Recon Loss:{r_loss.val:.4f},\t GAN Loss:{g_loss.val:.4f},\t D Loss:{d_loss.val:.4f}" \
                         .format(epoch, i+1, len(dataloader), batch_time=batch_time, data_time=data_time, whole_loss=losses['whole_loss'], r_loss=losses['r_loss'] \
-                        , n_loss=losses['n_loss']))
-                        # ,g_loss=losses['g_loss'], d_loss=losses['d_loss'], n_loss=losses['n_loss']))
+                        ,g_loss=losses['g_loss'], d_loss=losses['d_loss']))
             # Tensorboard logger for scaler and images
-            info_terms = {'WGLoss':whole_loss.item(), 'ReconLoss':r_loss.item()}
-            # info_terms = {'WGLoss':whole_loss.item(), 'ReconLoss':r_loss.item(), "GANLoss":g_loss.item(), "DLoss":d_loss.item()}
+            info_terms = {'WGLoss':whole_loss.item(), 'ReconLoss':r_loss.item(), "GANLoss":g_loss.item(), "DLoss":d_loss.item()}
 
             for tag, value in info_terms.items():
                 tensorboardlogger.scalar_summary(tag, value, epoch*len(dataloader)+i)
@@ -261,20 +244,19 @@ def train(netG, netD, GANLoss, ReconLoss, DLoss, NLoss, optG, optD, dataloader, 
                 return ((imgs+1)*127.5).transpose(1,2).transpose(2,3).detach().cpu().numpy()
             # info = { 'train/ori_imgs':img2photo(imgs),
             #          'train/coarse_imgs':img2photo(coarse_imgs),
-            #          'train/mixed':img2photo(mixed),
+            #          'train/recon_imgs':img2photo(recon_imgs),
             #          'train/comp_imgs':img2photo(complete_imgs),
             info = {
-                     'train/whole_imgs':img2photo(torch.cat([imgs * (1 - masks) + masks, refined, imgs * masks, complete_imgs, imgs], dim=3))
+                     'train/whole_imgs':img2photo(torch.cat([ imgs * (1 - masks) + masks, coarse_imgs, recon_imgs, imgs * masks, complete_imgs, imgs], dim=3))
                      }
 
             for tag, images in info.items():
                 tensorboardlogger.image_summary(tag, images, epoch*len(dataloader)+i)
         if (i+1) % config.VAL_SUMMARY_FREQ == 0 and val_datas is not None:
 
-            with torch.no_grad():
-                validate(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, val_datas , epoch, device, batch_n=i)
+            validate(netG, netD, GANLoss, ReconLoss, DLoss, optG, optD, val_datas , epoch, device, batch_n=i)
             netG.train()
-            # netD.train()
+            netD.train()
         end = time.time()
 
 def main():
@@ -338,7 +320,6 @@ def main():
     recon_loss = ReconLoss(*(config.L1_LOSS_ALPHA))
     gan_loss = SNGenLoss(config.GAN_LOSS_ALPHA)
     dis_loss = SNDisLoss()
-    new_loss = NewLoss()
     lr, decay = config.LEARNING_RATE, config.WEIGHT_DECAY
     optG = torch.optim.Adam(netG.parameters(), lr=lr, weight_decay=decay)
     optD = torch.optim.Adam(netD.parameters(), lr=4*lr, weight_decay=decay)
@@ -353,13 +334,11 @@ def main():
         #validate(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, val_loader, i, device=cuda0)
 
         #train data
-        # with autograd.detect_anomaly():
-        # validate(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, val_datas, i, device=cuda0)
-        train(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, train_loader, i, device=cuda0, val_datas=val_datas)
+        with autograd.detect_anomaly():
+            train(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, train_loader, i, device=cuda0, val_datas=val_datas)
 
         # validate
-        with torch.no_grad():
-            validate(netG, netD, gan_loss, recon_loss, dis_loss, new_loss, optG, optD, val_datas, i, device=cuda0)
+        validate(netG, netD, gan_loss, recon_loss, dis_loss, optG, optD, val_datas, i, device=cuda0)
 
         saved_model = {
             'epoch': i + 1,

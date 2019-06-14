@@ -1,6 +1,6 @@
 from .inception_score.inception_score import inception_score
 from .fid.fid import calculate_fid_given_paths
-from .ssim.ssim import ssim
+from .ssim.ssim import ssim, _sssim
 from .psnr.psnr import psnr
 import os
 import numpy as np
@@ -58,6 +58,31 @@ def _ssim(paths, window_size=11, size_average=True):
 
     return ssim_score / total
 
+def ff(x):
+    return ((x+1)/2.0).detach().cpu().numpy()
+    # return ((x+1)/2.0).transpose(1,2).transpose(2,3).detach().cpu().numpy()
+def fff(x):
+    return ((x+1)/2.0).detach().unsqueeze(0)
+
+def ppsnr(img1, img2):
+    batch_size = img1.shape[0]
+    res = 0
+    for i in range(batch_size):
+        i1 = img1[i,:,:,:]
+        i2 = img2[i,:,:,:]
+        res = res + psnr(ff(i1) * 255, ff(i2) * 255)
+    return res / batch_size
+
+def sssim(img1, img2):
+    batch_size = img1.shape[0]
+    res = 0
+    for i in range(batch_size):
+        i1 = img1[i,:,:,:]
+        i2 = img2[i,:,:,:]
+        res = res + _sssim(fff(i1), fff(i2), window_size = 11, size_average = True)
+    return res / batch_size
+    # return _sssim(ff(img1), ff(img2), window_size = 11, size_average = True)
+
 def _psnr(paths):
     path1, path2 = paths
     imgs1, imgs2 = [], []
@@ -89,4 +114,4 @@ def _meanl1(paths):
 
     return total_error / num
 
-metrics = {"is":_inception_score, "fid":_fid, "ssim":_ssim, "psnr":_psnr, "meanl1":_meanl1}
+metrics = {"is":_inception_score, "fid":_fid, "ssim":_ssim, "psnr":_psnr, "meanl1":_meanl1, "ppsnr":ppsnr, "sssim":sssim}
